@@ -106,3 +106,77 @@ export interface CurvePoint {
   basisPercent: number; // (F-S)/S
   annualizedBasis: number; // APR %
 }
+
+// --- Window Management Types ---
+
+export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE';
+
+export interface WindowState {
+  id: string;
+  type: ViewType;
+  title: string;
+  symbol?: string; // Context for the view (e.g. BTCUSDT)
+  isFloating: boolean;
+  isMinimized: boolean;
+  zIndex: number;
+  // Position & Size for floating
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface ScreenConfig {
+  name: string;
+  timestamp: number;
+  windows: WindowState[];
+  activeTabId: string;
+}
+
+// --- Portfolio & Risk Types ---
+
+export interface Position {
+  id: string;
+  baseAsset: string; // BTC
+  symbol: string; // BTCUSDT
+  venue: 'SPOT' | 'PERP_USDT' | 'FUTURE_USDT'; 
+  side: 'LONG' | 'SHORT';
+  quantity: number; // Always positive
+  avgEntryPrice: number;
+  timestamp: number;
+}
+
+export interface LivePosition extends Position {
+  markPrice: number;
+  notionalBase: number; // quantity * 1 (or contract multiplier)
+  notionalUsd: number; // quantity * markPrice
+  unrealizedPnl: number;
+  pnlPercent: number;
+}
+
+export interface PortfolioGroup {
+  baseAsset: string;
+  positions: LivePosition[];
+  netDeltaBase: number;
+  netDeltaUsd: number;
+  totalPnl: number;
+}
+
+export interface RiskMetrics {
+  totalEquity: number;
+  totalPnl: number;
+  dayPnl: number; // Simple approximation
+  netDeltaUsd: number;
+  longExposure: number;
+  shortExposure: number;
+  leverage: number; // gross / equity
+}
+
+export interface CarryMetric {
+    baseAsset: string;
+    spotPrice: number;
+    perpPrice: number;
+    basisBps: number;
+    fundingRate: number;
+    impliedCarryApr: number;
+}

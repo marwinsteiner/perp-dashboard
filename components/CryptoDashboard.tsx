@@ -1,289 +1,531 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useMarketData } from '../hooks/useMarketData';
-import { useFuturesCurve } from '../hooks/useFuturesCurve';
-import TerminalRow from './TerminalRow';
-import TerminalHeader from './TerminalHeader';
+import { v4 as uuidv4 } from 'uuid';
+import { WindowState, ViewType, ScreenConfig } from '../types';
+import FloatingWindow from './FloatingWindow';
+import WatchlistWidget from './WatchlistWidget';
+import PortfolioWidget from './PortfolioWidget';
 import FocusPane from './FocusPane';
 import BasisChart from './BasisChart';
 import TermStructureChart from './TermStructureChart';
+import SaveScreenModal from './SaveScreenModal';
 import BinanceService from '../services/binanceService';
-import { CombinedMarketData } from '../types';
+import { useFuturesCurve } from '../hooks/useFuturesCurve';
+
+// --- SERVICE WRAPPERS ---
+// Needed to provide independent service instances to windows
+
+const FocusWrapper = ({ symbol }: { symbol: string }) => {
+    const serviceRef = useRef<BinanceService | null>(null);
+    if (!serviceRef.current) {
+        serviceRef.current = new BinanceService([]);
+        serviceRef.current.connect();
+    }
+    useEffect(() => {
+        return () => serviceRef.current?.disconnect();
+    }, []);
+    return <FocusPane symbol={symbol} serviceRef={serviceRef} onClose={() => {}} />;
+};
+
+const ChartWrapper = ({ symbol }: { symbol: string }) => {
+    const serviceRef = useRef<BinanceService | null>(null);
+    if (!serviceRef.current) {
+        serviceRef.current = new BinanceService([]);
+    }
+    return <BasisChart symbol={symbol} service={serviceRef.current} />;
+};
+
+const CurveWrapper = ({ symbol }: { symbol: string }) => {
+    const serviceRef = useRef<BinanceService | null>(null);
+    if (!serviceRef.current) {
+        serviceRef.current = new BinanceService([]);
+        serviceRef.current.connect();
+    }
+    const { curveData } = useFuturesCurve(symbol, serviceRef);
+    return <TermStructureChart data={curveData} symbol={symbol} />;
+};
+
+
+// --- MAIN SHELL ---
 
 const CryptoDashboard: React.FC = () => {
-  const marketData = useMarketData();
+  // --- STATE ---
+  const [windows, setWindows] = useState<WindowState[]>([
+    { id: 'cs-main', type: 'SCREENER', title: 'CRYPTO SCREENER', isFloating: false, isMinimized: false, zIndex: 1, x: 0, y: 0, w: 0, h: 0 }
+  ]);
+  const [activeTabId, setActiveTabId] = useState<string>('cs-main');
+  const [commandMode, setCommandMode] = useState(false);
+  const [commandInput, setCommandInput] = useState('');
   
-  // State
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [isFocusPaneOpen, setIsFocusPaneOpen] = useState(true);
-  const [isChartOpen, setIsChartOpen] = useState(false);
-  const [isFuturesOpen, setIsFuturesOpen] = useState(false); // New Tab State
-  const [showExitModal, setShowExitModal] = useState(false);
-  const [isAppTerminated, setIsAppTerminated] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  // Screen Management State
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [savedScreens, setSavedScreens] = useState<ScreenConfig[]>([]);
+  
+  const cmdInputRef = useRef<HTMLInputElement>(null);
 
-  // Refs
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const rowRefs = useRef<{[key: string]: HTMLTableRowElement | null}>({});
-  const focusServiceRef = useRef<BinanceService | null>(null);
-
-  // Initialize Focus Service
-  if (!focusServiceRef.current) {
-    focusServiceRef.current = new BinanceService([]); 
-  }
-
-  const selectedSymbol = marketData[selectedIndex]?.symbol || 'BTCUSDT';
-
-  // Hook for Curve Data (Only active when tab is open)
-  // We conditionally pass the symbol or null to control fetching
-  const curveDataSymbol = isFuturesOpen ? selectedSymbol : '';
-  const { curveData } = useFuturesCurve(curveDataSymbol, focusServiceRef);
-
-  // Auto-scroll to selected row
+  // --- INITIALIZATION ---
   useEffect(() => {
-    if (marketData[selectedIndex]) {
-        const sym = marketData[selectedIndex].symbol;
-        rowRefs.current[sym]?.scrollIntoView({ block: 'nearest' });
-    }
-  }, [selectedIndex, marketData]);
-
-  // Global Keyboard Handler
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isAppTerminated) return;
-
-      // 1. Exit Modal State
-      if (showExitModal) {
-        e.preventDefault(); // Lock focus
-        const key = e.key.toLowerCase();
-        if (key === 'x') {
-            setIsAppTerminated(true);
-        } else if (key === 'e' || e.key === 'Escape') {
-            setShowExitModal(false);
-        }
-        return;
+      // Load screens from localStorage
+      const saved = localStorage.getItem('termifi_screens');
+      if (saved) {
+          try {
+              setSavedScreens(JSON.parse(saved));
+          } catch (e) {
+              console.error("Failed to parse saved screens", e);
+          }
       }
+  }, []);
 
-      const isSearchFocused = document.activeElement === searchInputRef.current;
+  // --- WINDOW ACTIONS ---
 
-      // 2. Search Input State
-      if (isSearchFocused) {
-          if (e.key === 'Escape') {
-              searchInputRef.current?.blur();
-          } else if (e.key === 'Enter') {
-              // Commit search
-              const query = searchInputRef.current?.value.toUpperCase().trim() || '';
-              if (query) {
-                  const idx = marketData.findIndex(d => 
-                    d.symbol.startsWith(query) || d.symbol.replace('USDT','').startsWith(query)
-                  );
-                  
-                  if (idx !== -1) {
-                      setSelectedIndex(idx);
-                      setIsFocusPaneOpen(true);
-                      searchInputRef.current?.blur();
-                  }
+  const createWindow = (type: ViewType, symbol?: string) => {
+    const id = uuidv4();
+    const title = symbol 
+        ? `${type}: ${symbol.replace('USDT','')}` 
+        : type === 'SCREENER' ? 'CRYPTO SCREENER' : 'PORTFOLIO';
+    
+    const newWin: WindowState = {
+        id,
+        type,
+        title,
+        symbol,
+        isFloating: false,
+        isMinimized: false,
+        zIndex: Math.max(0, ...windows.map(w => w.zIndex)) + 1,
+        x: 100 + (windows.length * 20),
+        y: 100 + (windows.length * 20),
+        w: 600,
+        h: 400
+    };
+
+    setWindows(prev => [...prev, newWin]);
+    setActiveTabId(id);
+  };
+
+  const closeWindow = (id: string) => {
+    setWindows(prev => {
+        const next = prev.filter(w => w.id !== id);
+        if (id === activeTabId) {
+            const nextTab = next.find(w => !w.isFloating && !w.isMinimized);
+            if (nextTab) setActiveTabId(nextTab.id);
+        }
+        return next;
+    });
+  };
+
+  const toggleDock = (id: string) => {
+    setWindows(prev => prev.map(w => {
+        if (w.id !== id) return w;
+        const willFloat = !w.isFloating;
+        if (!willFloat) setActiveTabId(id);
+        return {
+            ...w,
+            isFloating: willFloat,
+            isMinimized: false,
+            // Default floating size if just popping out, otherwise keep existing
+            x: willFloat ? 100 : w.x, 
+            y: willFloat ? 100 : w.y, 
+            w: willFloat ? 800 : w.w, 
+            h: willFloat ? 500 : w.h,
+            zIndex: Math.max(0, ...prev.map(p => p.zIndex)) + 1
+        };
+    }));
+  };
+
+  const minimizeWindow = (id: string) => {
+      setWindows(prev => prev.map(w => w.id === id ? { ...w, isMinimized: true } : w));
+      // If active window is minimized, try to focus another
+      if (id === activeTabId) {
+          const others = windows.filter(w => w.id !== id && !w.isMinimized);
+          if (others.length > 0) {
+              setActiveTabId(others[others.length - 1].id);
+          }
+      }
+  };
+
+  const restoreWindow = (id: string) => {
+      setWindows(prev => prev.map(w => {
+          if (w.id !== id) return w;
+          return { 
+              ...w, 
+              isMinimized: false, 
+              zIndex: Math.max(0, ...prev.map(p => p.zIndex)) + 1 
+          };
+      }));
+      setActiveTabId(id);
+  };
+
+  const focusWindow = (id: string) => {
+     setWindows(prev => prev.map(w => ({
+         ...w,
+         zIndex: w.id === id ? Math.max(0, ...prev.map(p => p.zIndex)) + 1 : w.zIndex
+     })));
+     setActiveTabId(id);
+  };
+
+  const moveWindow = (id: string, x: number, y: number) => {
+      setWindows(prev => prev.map(w => w.id === id ? { ...w, x, y } : w));
+  };
+  
+  const resizeWindow = (id: string, w: number, h: number) => {
+      setWindows(prev => prev.map(win => win.id === id ? { ...win, w, h } : win));
+  };
+
+  const snapWindow = (direction: 'LEFT' | 'RIGHT' | 'UP' | 'DOWN') => {
+    const active = windows.find(w => w.id === activeTabId);
+    if (!active || !active.isFloating || active.isMinimized) return;
+
+    const headerH = 32;
+    const footerH = 32;
+    const availableH = window.innerHeight - headerH - footerH;
+    const halfW = window.innerWidth / 2;
+
+    let updates = {};
+
+    switch (direction) {
+        case 'LEFT':
+            updates = { x: 0, y: headerH, w: halfW, h: availableH };
+            break;
+        case 'RIGHT':
+            updates = { x: halfW, y: headerH, w: halfW, h: availableH };
+            break;
+        case 'UP': // Maximize
+             updates = { x: 0, y: headerH, w: window.innerWidth, h: availableH };
+             break;
+        case 'DOWN': // Restore to default center
+             updates = { x: window.innerWidth / 2 - 400, y: window.innerHeight / 2 - 250, w: 800, h: 500 };
+             break;
+    }
+
+    setWindows(prev => prev.map(w => w.id === active.id ? { ...w, ...updates } : w));
+};
+
+  // --- WORKSPACE SAVING/LOADING ---
+
+  const saveCurrentScreen = (name: string) => {
+      const newScreen: ScreenConfig = {
+          name,
+          timestamp: Date.now(),
+          windows,
+          activeTabId
+      };
+      
+      const updatedScreens = [...savedScreens.filter(s => s.name !== name), newScreen];
+      setSavedScreens(updatedScreens);
+      localStorage.setItem('termifi_screens', JSON.stringify(updatedScreens));
+      setIsSaveModalOpen(false);
+  };
+
+  const loadScreen = (screen: ScreenConfig) => {
+      // Logic to deep copy windows to ensure react remounts if needed or just updates state
+      // IDs are persisted, which is fine.
+      setWindows(screen.windows);
+      setActiveTabId(screen.activeTabId);
+  };
+
+  const deleteScreen = (e: React.MouseEvent, name: string) => {
+      e.stopPropagation();
+      const updated = savedScreens.filter(s => s.name !== name);
+      setSavedScreens(updated);
+      localStorage.setItem('termifi_screens', JSON.stringify(updated));
+  };
+
+
+  // --- COMMAND SYSTEM & SHORTCUTS ---
+
+  useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+          // Save Screen (Ctrl + S)
+          if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+              e.preventDefault();
+              setIsSaveModalOpen(true);
+              return;
+          }
+
+          // Window Snapping (Win/Meta + Arrows)
+          if (e.metaKey || e.altKey) { // Meta for Mac/Win (if not captured), Alt as backup
+              if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+                  e.preventDefault();
+                  if (e.key === 'ArrowLeft') snapWindow('LEFT');
+                  if (e.key === 'ArrowRight') snapWindow('RIGHT');
+                  if (e.key === 'ArrowUp') snapWindow('UP');
+                  if (e.key === 'ArrowDown') snapWindow('DOWN');
+                  return;
               }
           }
-          return;
+
+          // Open Command
+          if (e.key === '/' && !commandMode && !isSaveModalOpen) {
+              // Prevent if typing in an input
+              if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+                   // allow typing '/' in other inputs
+              } else {
+                  e.preventDefault();
+                  setCommandMode(true);
+                  setTimeout(() => cmdInputRef.current?.focus(), 10);
+                  return;
+              }
+          }
+          // Close Command
+          if (commandMode && e.key === 'Escape') {
+              setCommandMode(false);
+              setCommandInput('');
+              return;
+          }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [commandMode, activeTabId, windows, isSaveModalOpen]);
+
+  const executeCommand = () => {
+      const cmd = commandInput.toUpperCase().trim();
+      setCommandMode(false);
+      setCommandInput('');
+
+      // Commands
+      if (cmd === 'CS') {
+          const existing = windows.find(w => w.type === 'SCREENER');
+          if (existing) {
+              if (existing.isMinimized) restoreWindow(existing.id);
+              else focusWindow(existing.id);
+              if (existing.isFloating) toggleDock(existing.id);
+              setActiveTabId(existing.id);
+          } else {
+              createWindow('SCREENER');
+          }
+      } else if (cmd === 'PORT') {
+          const existing = windows.find(w => w.type === 'PORTFOLIO');
+          if (existing) {
+             if (existing.isMinimized) restoreWindow(existing.id);
+             else focusWindow(existing.id);
+             setActiveTabId(existing.id);
+          } else {
+              createWindow('PORTFOLIO');
+          }
+      } else if (cmd.startsWith('F ')) {
+          const sym = cmd.substring(2).trim() + 'USDT';
+          createWindow('FOCUS', sym);
+      } else if (cmd.startsWith('C ')) {
+          const sym = cmd.substring(2).trim() + 'USDT';
+          createWindow('CHART', sym);
+      } else if (cmd.startsWith('Q ')) {
+          const sym = cmd.substring(2).trim() + 'USDT';
+          createWindow('CURVE', sym);
+      } else if (cmd === 'SAVE') {
+          setIsSaveModalOpen(true);
       }
+  };
 
-      // 3. Normal Dashboard Navigation
-      if (e.key === '/') {
-        e.preventDefault();
-        setSearchTerm(''); // Clear input
-        searchInputRef.current?.focus();
-        return;
+  // --- RENDER HELPERS ---
+
+  const renderContent = (w: WindowState, isActiveContext: boolean) => {
+      switch (w.type) {
+          case 'SCREENER': 
+            return <WatchlistWidget 
+                isActiveContext={isActiveContext} 
+                onSelectSymbol={(sym) => createWindow('FOCUS', sym)} 
+            />;
+          case 'PORTFOLIO': return <PortfolioWidget />;
+          case 'FOCUS': return w.symbol ? <FocusWrapper symbol={w.symbol} /> : null;
+          case 'CHART': return w.symbol ? <ChartWrapper symbol={w.symbol} /> : null;
+          case 'CURVE': return w.symbol ? <CurveWrapper symbol={w.symbol} /> : null;
+          default: return null;
       }
+  };
 
-      if (e.key.toLowerCase() === 'f') {
-        setIsFocusPaneOpen(true);
-        // If entering focus, maybe close others or keep stacking?
-        // Let's keep them independent but maybe exclusive for cleanliness if screen is small
-        return;
-      }
+  // Get current context for Footer help
+  const activeWindow = windows.find(w => w.id === activeTabId);
+  const helpContext = activeWindow?.type || 'SCREENER';
 
-      if (e.key.toLowerCase() === 'c') {
-        setIsChartOpen(prev => !prev);
-        if (isFuturesOpen) setIsFuturesOpen(false); // Exclusive toggle
-        return;
-      }
+  const dockedWindows = windows.filter(w => !w.isFloating);
+  const floatingWindows = windows.filter(w => w.isFloating && !w.isMinimized);
+  const minimizedWindows = windows.filter(w => w.isMinimized);
 
-      // New 'q' key for Futures Term Structure
-      if (e.key.toLowerCase() === 'q') {
-        setIsFuturesOpen(prev => !prev);
-        if (isChartOpen) setIsChartOpen(false); // Exclusive toggle
-        return;
-      }
-
-      if (e.key.toLowerCase() === 'x') {
-        // Priority Close: Futures > Chart > Focus > Exit Modal
-        if (isFuturesOpen) {
-            setIsFuturesOpen(false);
-        } else if (isChartOpen) {
-            setIsChartOpen(false);
-        } else if (isFocusPaneOpen) {
-            setIsFocusPaneOpen(false);
-        } else {
-            setShowExitModal(true);
-        }
-        return;
-      }
-
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setSelectedIndex(prev => Math.min(prev + 1, marketData.length - 1));
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setSelectedIndex(prev => Math.max(prev - 1, 0));
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [marketData, isAppTerminated, showExitModal, isFocusPaneOpen, isChartOpen, isFuturesOpen]);
-
-  if (isAppTerminated) {
-    return (
-        <div className="h-screen bg-black flex flex-col items-center justify-center text-red-600 font-mono tracking-widest animate-pulse">
-            <h1 className="text-4xl font-bold mb-4">SESSION TERMINATED</h1>
-            <p className="text-gray-600 text-sm">Refresh to restart terminal</p>
-        </div>
-    );
-  }
-
-  // Calculate Layout Cols
-  // Logic: 
-  // - Futures Open? It takes the Center/Right slot (Col 4-12). Watchlist (4). Focus hidden.
-  // - Chart Open? Watchlist (4) + Chart (8). Focus hidden.
-  // - Default? Watchlist (8) + Focus (4).
-  
-  let watchlistCols = 'col-span-12';
-  let centerPaneCols = 'hidden';
-  let centerPaneContent: React.ReactNode = null;
-  let focusCols = 'hidden';
-
-  if (isFuturesOpen) {
-      watchlistCols = 'col-span-4';
-      centerPaneCols = 'col-span-8';
-      centerPaneContent = <TermStructureChart data={curveData} symbol={selectedSymbol} />;
-      focusCols = 'hidden'; // Hide focus pane when curve is open to give space
-  } else if (isChartOpen) {
-      watchlistCols = 'col-span-4';
-      centerPaneCols = 'col-span-8';
-      centerPaneContent = <BasisChart symbol={selectedSymbol} service={focusServiceRef.current!} />;
-      focusCols = 'hidden';
-  } else if (isFocusPaneOpen) {
-      watchlistCols = 'col-span-8';
-      focusCols = 'col-span-4';
-  }
+  // Find active docked content
+  const activeDocked = dockedWindows.find(w => w.id === activeTabId);
 
   return (
-    <div className="h-screen bg-black text-gray-300 font-mono flex flex-col overflow-hidden relative">
-      <TerminalHeader />
+    <div className="h-screen bg-black text-gray-300 font-mono flex flex-col overflow-hidden relative selection:bg-cyan-900 selection:text-white">
+      {/* HEADER / TABS */}
+      <div className="bg-neutral-900 border-b border-gray-800 flex h-8 shrink-0">
+          {/* Logo / Drag Area */}
+          <div className="flex items-center px-4 bg-cyan-900 text-black font-bold text-xs select-none">
+              TERMIFI
+          </div>
+          
+          {/* Tabs Container */}
+          <div className="flex-1 flex items-end px-2 gap-1 overflow-x-auto">
+              {dockedWindows.map(w => (
+                  <div 
+                    key={w.id}
+                    onClick={() => setActiveTabId(w.id)}
+                    className={`
+                        group relative px-4 h-7 text-xs flex items-center gap-2 cursor-pointer border-t border-l border-r rounded-t-sm select-none
+                        ${w.id === activeTabId 
+                            ? 'bg-black border-gray-700 text-cyan-400 font-bold z-10' 
+                            : 'bg-gray-900 border-gray-800 text-gray-500 hover:bg-gray-800'}
+                    `}
+                  >
+                      <span>{w.title}</span>
+                      {/* Tab Controls (Float/Close) */}
+                      <div className="w-0 overflow-hidden group-hover:w-auto flex gap-1 ml-2 transition-all">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); toggleDock(w.id); }} 
+                            className="hover:text-white" title="Pop Out">
+                                ↗
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); closeWindow(w.id); }} 
+                            className="hover:text-red-500" title="Close">
+                                x
+                          </button>
+                      </div>
+                  </div>
+              ))}
+              {/* New Tab Button */}
+              <button 
+                onClick={() => createWindow('PORTFOLIO')}
+                className="px-2 h-6 text-gray-600 hover:text-cyan-500 text-lg leading-none"
+              >
+                  +
+              </button>
+          </div>
+      </div>
+
+      {/* DOCKED WORKSPACE */}
+      <div className="flex-1 relative bg-black min-h-0">
+          {activeDocked && (
+              <div className="w-full h-full">
+                  {renderContent(activeDocked, !commandMode)}
+              </div>
+          )}
+          {!activeDocked && dockedWindows.length === 0 && (
+              <div className="w-full h-full flex items-center justify-center text-gray-700">
+                  NO ACTIVE WORKSPACE. PRESS '/' FOR COMMANDS.
+              </div>
+          )}
+      </div>
+
+      {/* FLOATING WINDOWS LAYER */}
+      {floatingWindows.map(w => (
+          <FloatingWindow
+            key={w.id}
+            id={w.id}
+            title={w.title}
+            x={w.x} y={w.y} w={w.w} h={w.h} zIndex={w.zIndex}
+            onClose={() => closeWindow(w.id)}
+            onToggleDock={() => toggleDock(w.id)}
+            onMinimize={() => minimizeWindow(w.id)}
+            onFocus={() => focusWindow(w.id)}
+            onMove={moveWindow}
+            onResize={resizeWindow}
+          >
+              {renderContent(w, false)}
+          </FloatingWindow>
+      ))}
+
+      {/* MODALS / OVERLAYS */}
       
-      <div className="flex-1 grid grid-cols-12 min-h-0">
-        {/* Left: Watchlist */}
-        <div className={`${watchlistCols} overflow-auto border-r border-gray-800 flex flex-col transition-all duration-200`}>
-            {/* Inline Search Bar */}
-            <div className="bg-neutral-900 border-b border-gray-800 p-1 px-3 flex items-center sticky top-0 z-20">
-                <span className={`mr-2 text-xs font-bold ${document.activeElement === searchInputRef.current ? 'text-cyan-400' : 'text-gray-600'}`}>/ SEARCH:</span>
-                <input 
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="bg-transparent border-none outline-none text-cyan-400 text-sm font-bold uppercase w-full placeholder-gray-800"
-                    placeholder="SYMBOL..."
-                    spellCheck={false}
-                    autoComplete="off"
-                />
-            </div>
+      <SaveScreenModal 
+          isOpen={isSaveModalOpen} 
+          onClose={() => setIsSaveModalOpen(false)}
+          onSave={saveCurrentScreen}
+      />
 
-            <table className="w-full text-left border-collapse">
-                <thead className="bg-neutral-900 sticky top-8 z-10 text-xs uppercase tracking-wider border-b border-gray-700">
-                    <tr>
-                    <th className="px-4 py-2 text-cyan-500 font-normal border-r border-gray-800 w-24">Symbol</th>
-                    <th className="px-4 py-2 text-green-600 font-normal border-r border-gray-800 text-right">Spot Bid</th>
-                    <th className="px-4 py-2 text-red-600 font-normal border-r border-gray-800 text-right">Spot Ask</th>
-                    <th className="px-4 py-2 text-fuchsia-500 font-normal border-r border-gray-800 text-right">Spread</th>
-                    <th className="px-4 py-2 text-yellow-500 font-normal border-r border-gray-800 text-right">Perp Mark</th>
-                    <th className="px-4 py-2 text-blue-400 font-normal border-r border-gray-800 text-right">Basis %</th>
-                    <th className="px-4 py-2 text-orange-400 font-normal text-right">Fund</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-900">
-                    {marketData.map((data, idx) => (
-                    <TerminalRow 
-                        key={data.symbol} 
-                        data={data} 
-                        isSelected={idx === selectedIndex}
-                        innerRef={(el) => (rowRefs.current[data.symbol] = el)}
-                    />
-                    ))}
-                </tbody>
-            </table>
-        </div>
-
-        {/* Center Pane: Futures Curve OR Candle Chart */}
-        {centerPaneCols !== 'hidden' && (
-             <div className={`${centerPaneCols} h-full min-h-0 animate-in fade-in duration-300`}>
-                {centerPaneContent}
-             </div>
-        )}
-
-        {/* Right: Focus Pane */}
-        {isFocusPaneOpen && !isFuturesOpen && !isChartOpen && (
-            <div className={`${focusCols} h-full min-h-0 animate-in fade-in slide-in-from-right duration-200`}>
-                <FocusPane 
-                    symbol={selectedSymbol} 
-                    serviceRef={focusServiceRef} 
-                    onClose={() => setIsFocusPaneOpen(false)}
-                />
-            </div>
-        )}
-      </div>
-
-      <div className="bg-neutral-900 border-t border-gray-800 p-1 text-[10px] text-gray-500 flex justify-between px-4 shrink-0">
-        <div className="flex gap-4">
-            <span>DATA: BINANCE</span>
-            <span><span className="text-cyan-600 font-bold">/</span> SEARCH</span>
-            <span><span className="text-cyan-600 font-bold">F</span> FOCUS</span>
-            <span><span className="text-cyan-600 font-bold">C</span> CHART</span>
-            <span><span className="text-cyan-600 font-bold">Q</span> FUTURES</span>
-            <span><span className="text-cyan-600 font-bold">X</span> CLOSE</span>
-        </div>
-        <span>MONITORING {marketData.length} SYMBOLS</span>
-      </div>
-
-      {/* Exit Confirmation Modal */}
-      {showExitModal && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-            <div className="bg-neutral-900 border border-red-800 w-96 shadow-2xl p-6">
-                <h2 className="text-red-500 font-bold text-xl mb-6 text-center tracking-wider border-b border-red-900/30 pb-4">
-                    EXIT PLATFORM?
-                </h2>
-                
-                <div className="flex gap-3 justify-center">
-                    <button 
-                        className="bg-red-900/40 text-red-400 hover:bg-red-900/60 border border-red-800 px-6 py-2 text-sm font-bold transition-colors"
-                        onClick={() => setIsAppTerminated(true)}
-                    >
-                        [X] EXIT
-                    </button>
-                    <button 
-                        className="bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-600 px-6 py-2 text-sm font-bold transition-colors"
-                        onClick={() => setShowExitModal(false)}
-                    >
-                        [E] CANCEL
-                    </button>
-                </div>
-
-                <div className="mt-6 text-center text-[10px] text-gray-500 uppercase tracking-wide">
-                    Press <span className="text-white">x</span> to confirm &bull; <span className="text-white">e</span> or <span className="text-white">Esc</span> to cancel
-                </div>
-            </div>
-        </div>
+      {commandMode && (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1/2 bg-black border-2 border-amber-600 shadow-2xl z-50 p-2 flex flex-col animate-in fade-in zoom-in-95 duration-100">
+              <div className="text-[10px] text-amber-600 font-bold mb-1 uppercase tracking-wider">Execute Command</div>
+              <div className="flex items-center gap-2">
+                  <span className="text-amber-500 font-bold text-xl">/</span>
+                  <input 
+                    ref={cmdInputRef}
+                    type="text" 
+                    className="flex-1 bg-transparent border-none outline-none text-xl font-mono text-amber-500 uppercase placeholder-amber-900"
+                    placeholder="CMD (e.g., CS, PORT, F BTC)"
+                    value={commandInput}
+                    onChange={e => setCommandInput(e.target.value)}
+                    onKeyDown={e => {
+                        if (e.key === 'Enter') executeCommand();
+                    }}
+                  />
+              </div>
+              <div className="mt-2 text-[10px] text-gray-500 flex gap-4">
+                  <span><strong className="text-gray-300">CS</strong> SCREENER</span>
+                  <span><strong className="text-gray-300">PORT</strong> PORTFOLIO</span>
+                  <span><strong className="text-gray-300">SAVE</strong> SAVE SCREEN</span>
+              </div>
+          </div>
       )}
+
+      {/* FOOTER / STATUS BAR */}
+      <div className="bg-neutral-900 border-t border-gray-800 p-1 text-[10px] text-gray-500 flex justify-between items-center px-4 shrink-0 z-50 h-8">
+        <div className="flex items-center gap-4">
+            <span>MODE: <span className="text-cyan-500 font-bold">{helpContext}</span></span>
+            
+            {/* Contextual Help */}
+            {helpContext === 'SCREENER' && (
+                <>
+                    <span><span className="text-white">↑/↓</span> NAV</span>
+                    <span><span className="text-white">ENTER</span> SELECT</span>
+                </>
+            )}
+            
+            <span><span className="text-amber-600 font-bold">/</span> CMD</span>
+
+            {/* Screens List */}
+            {savedScreens.length > 0 && (
+                <>
+                    <div className="h-4 w-px bg-gray-700 mx-2"></div>
+                    <span className="text-gray-600 font-bold">SCREENS:</span>
+                    <div className="flex gap-2">
+                        {savedScreens.map(s => (
+                            <div key={s.name} className="flex group">
+                                <button 
+                                    onClick={() => loadScreen(s)}
+                                    className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-0.5 rounded-l-sm border border-gray-700 hover:border-gray-600 border-r-0 transition-colors uppercase font-bold text-[9px]"
+                                    title={`Load ${s.name}`}
+                                >
+                                    {s.name}
+                                </button>
+                                <button
+                                    onClick={(e) => deleteScreen(e, s.name)}
+                                    className="bg-gray-800 hover:bg-red-900/50 text-gray-500 hover:text-red-400 px-1 py-0.5 rounded-r-sm border border-gray-700 border-l-0 transition-colors"
+                                    title="Delete Screen"
+                                >
+                                    x
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </>
+            )}
+            
+            {/* Minimized Windows (Taskbar) */}
+            {minimizedWindows.length > 0 && (
+                <>
+                    <div className="h-4 w-px bg-gray-700 mx-2"></div>
+                    <div className="flex gap-2">
+                        {minimizedWindows.map(w => (
+                            <button 
+                                key={w.id}
+                                onClick={() => restoreWindow(w.id)}
+                                className="bg-gray-800 hover:bg-gray-700 text-gray-400 px-2 rounded-sm border border-gray-700 flex items-center gap-1"
+                                title="Restore"
+                            >
+                                <span className="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+                                {w.title}
+                            </button>
+                        ))}
+                    </div>
+                </>
+            )}
+        </div>
+        
+        <div className="flex items-center gap-4">
+            <span className="text-gray-600">SAVE: <span className="text-white">CTRL+S</span></span>
+            <span className="text-gray-600">SNAP: ⌘+ARROWS</span>
+            <span>{dockedWindows.length} TABS &bull; {floatingWindows.length} FLOAT</span>
+        </div>
+      </div>
     </div>
   );
 };
