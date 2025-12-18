@@ -1,0 +1,5 @@
+{
+  "name": "TermiFi Crypto Terminal",
+  "description": "A dense, Bloomberg-inspired crypto market dashboard monitoring real-time spot, perp, and funding rates for arbitrage opportunities.",
+  "requestFramePermissions": []
+}
