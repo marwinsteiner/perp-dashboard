@@ -109,7 +109,7 @@ export interface CurvePoint {
 
 // --- Window Management Types ---
 
-export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE' | 'MARS' | 'STRAT' | 'HELP';
+export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE' | 'MARS' | 'STRAT' | 'HELP' | 'SHOCK';
 
 export interface WindowState {
   id: string;
@@ -260,4 +260,42 @@ export interface StrategyLog {
   oldState?: string;
   newState?: string;
   reason: string;
+}
+
+// --- SHOCK (Scenario Analysis) Types ---
+
+export interface ShockParameter {
+  id: string;
+  type: 'SPOT_PCT' | 'FUTURES_PCT' | 'FUNDING_ABS' | 'BASIS_BPS';
+  scope: 'GLOBAL' | 'ASSET' | 'STRATEGY';
+  target?: string; // e.g. 'BTC' or 'TREND_FOLLOW'
+  value: number; // e.g. -5 for -5% or 0.01 for 0.01%
+}
+
+export interface ShockScenario {
+  id: string;
+  name: string;
+  parameters: ShockParameter[];
+}
+
+export interface ShockResultNode {
+  id: string;
+  name: string;
+  type: 'DESK' | 'STRATEGY' | 'ASSET';
+  
+  // Current Live State
+  currentPnl: number;
+  currentGross: number;
+  currentUtilization: number;
+
+  // Hypothetical State
+  shockPnl: number; // The new Total PnL
+  shockDeltaPnl: number; // Change in PnL (Scenario Impact)
+  shockGross: number;
+  shockUtilization: number;
+  
+  isBreached: boolean;
+  isMarginCall: boolean; // Mock metric
+
+  children?: ShockResultNode[];
 }

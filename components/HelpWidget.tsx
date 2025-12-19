@@ -13,6 +13,7 @@ const COMMANDS: CommandInfo[] = [
   { cmd: 'PORT', description: 'Open the Portfolio and Carry monitor. View positions and delta aggregates.', category: 'Navigation' },
   { cmd: 'MARS', description: 'Multi-Asset Risk System. Monitor desk/strategy/trader limits and utilization.', category: 'Risk Management' },
   { cmd: 'STRAT', description: 'Strategy Control & Health. Monitor systematic strategies and apply overrides.', category: 'Operations' },
+  { cmd: 'SHOCK', description: 'Scenario Analysis & Stress Testing. Hypothetical P&L simulations.', category: 'Risk Management' },
   { cmd: 'SAVE', description: 'Open the workspace save dialog to store the current window layout.', category: 'Utility' },
   { cmd: 'H', description: 'Open this Help & Documentation system.', category: 'Utility' },
   { cmd: 'F [SYM]', description: 'Focus View. Open depth ladders and micro-metrics for a symbol.', category: 'Analytical', example: 'F BTC' },
