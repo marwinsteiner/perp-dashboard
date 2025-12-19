@@ -1,17 +1,18 @@
+
 import { Position } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 // Seed Data for a Delta Neutral Desk
 const SEED_POSITIONS: Position[] = [
-    { id: '1', baseAsset: 'BTC', symbol: 'BTCUSDT', venue: 'SPOT', side: 'LONG', quantity: 2.5, avgEntryPrice: 96500, timestamp: Date.now() },
-    { id: '2', baseAsset: 'BTC', symbol: 'BTCUSDT', venue: 'PERP_USDT', side: 'SHORT', quantity: 2.5, avgEntryPrice: 96800, timestamp: Date.now() },
+    { id: '1', baseAsset: 'BTC', symbol: 'BTCUSDT', venue: 'SPOT', side: 'LONG', quantity: 25, avgEntryPrice: 96500, timestamp: Date.now(), strategyId: 'ARB_DELTA_NEUTRAL', traderId: 'ALICE' },
+    { id: '2', baseAsset: 'BTC', symbol: 'BTCUSDT', venue: 'PERP_USDT', side: 'SHORT', quantity: 25, avgEntryPrice: 96800, timestamp: Date.now(), strategyId: 'ARB_DELTA_NEUTRAL', traderId: 'ALICE' },
     
-    { id: '3', baseAsset: 'ETH', symbol: 'ETHUSDT', venue: 'SPOT', side: 'LONG', quantity: 30, avgEntryPrice: 2650, timestamp: Date.now() },
-    { id: '4', baseAsset: 'ETH', symbol: 'ETHUSDT', venue: 'PERP_USDT', side: 'SHORT', quantity: 15, avgEntryPrice: 2680, timestamp: Date.now() },
-    { id: '5', baseAsset: 'ETH', symbol: 'ETHUSDT_250328', venue: 'FUTURE_USDT', side: 'SHORT', quantity: 15, avgEntryPrice: 2750, timestamp: Date.now() },
+    { id: '3', baseAsset: 'ETH', symbol: 'ETHUSDT', venue: 'SPOT', side: 'LONG', quantity: 300, avgEntryPrice: 2650, timestamp: Date.now(), strategyId: 'ARB_DELTA_NEUTRAL', traderId: 'ALICE' },
+    { id: '4', baseAsset: 'ETH', symbol: 'ETHUSDT', venue: 'PERP_USDT', side: 'SHORT', quantity: 150, avgEntryPrice: 2680, timestamp: Date.now(), strategyId: 'TREND_FOLLOW', traderId: 'BOB' },
+    { id: '5', baseAsset: 'ETH', symbol: 'ETHUSDT_250328', venue: 'FUTURE_USDT', side: 'SHORT', quantity: 150, avgEntryPrice: 2750, timestamp: Date.now(), strategyId: 'ARB_DELTA_NEUTRAL', traderId: 'ALICE' },
 
-    { id: '6', baseAsset: 'SOL', symbol: 'SOLUSDT', venue: 'SPOT', side: 'LONG', quantity: 500, avgEntryPrice: 180, timestamp: Date.now() },
-    { id: '7', baseAsset: 'SOL', symbol: 'SOLUSDT', venue: 'PERP_USDT', side: 'SHORT', quantity: 500, avgEntryPrice: 182, timestamp: Date.now() },
+    { id: '6', baseAsset: 'SOL', symbol: 'SOLUSDT', venue: 'SPOT', side: 'LONG', quantity: 5000, avgEntryPrice: 180, timestamp: Date.now(), strategyId: 'TREND_FOLLOW', traderId: 'BOB' },
+    { id: '7', baseAsset: 'SOL', symbol: 'SOLUSDT', venue: 'PERP_USDT', side: 'SHORT', quantity: 5000, avgEntryPrice: 182, timestamp: Date.now(), strategyId: 'TREND_FOLLOW', traderId: 'BOB' },
 ];
 
 class PaperExecutionService {
@@ -47,9 +48,8 @@ class PaperExecutionService {
         return this.positions;
     }
 
-    // Basic execution stub - would elaborate with order types for full execution engine
-    public executeTrade(symbol: string, baseAsset: string, venue: Position['venue'], side: 'LONG' | 'SHORT', qty: number, price: number) {
-        // Netting logic omitted for simplicity, just adding rows
+    // Basic execution stub
+    public executeTrade(symbol: string, baseAsset: string, venue: Position['venue'], side: 'LONG' | 'SHORT', qty: number, price: number, strategyId?: string, traderId?: string) {
         const newPos: Position = {
             id: uuidv4(),
             baseAsset,
@@ -58,7 +58,9 @@ class PaperExecutionService {
             side,
             quantity: qty,
             avgEntryPrice: price,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            strategyId,
+            traderId
         };
         this.positions.push(newPos);
         this.save();

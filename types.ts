@@ -109,7 +109,7 @@ export interface CurvePoint {
 
 // --- Window Management Types ---
 
-export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE';
+export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE' | 'MARS';
 
 export interface WindowState {
   id: string;
@@ -144,6 +144,8 @@ export interface Position {
   quantity: number; // Always positive
   avgEntryPrice: number;
   timestamp: number;
+  strategyId?: string;
+  traderId?: string;
 }
 
 export interface LivePosition extends Position {
@@ -179,4 +181,38 @@ export interface CarryMetric {
     basisBps: number;
     fundingRate: number;
     impliedCarryApr: number;
+}
+
+// --- MARS (Risk System) Types ---
+
+export interface RiskLimit {
+  id: string;
+  type: 'DESK' | 'STRATEGY' | 'TRADER' | 'SYMBOL' | 'VENUE';
+  entityId: string; // The ID of the strategy, trader, etc.
+  limitNotionalUsd: number;
+  isHardBlock: boolean;
+}
+
+export interface RiskNode {
+  id: string;
+  name: string;
+  type: 'DESK' | 'STRATEGY' | 'TRADER' | 'SYMBOL' | 'VENUE';
+  grossExposureUsd: number;
+  netExposureUsd: number;
+  longExposureUsd: number;
+  shortExposureUsd: number;
+  limitUsd: number;
+  utilization: number; // 0 to 1
+  isBreached: boolean;
+  children?: RiskNode[];
+  isBlocked?: boolean;
+}
+
+export interface RiskOverrideLog {
+  timestamp: number;
+  entityId: string;
+  user: string;
+  oldLimit: number;
+  newLimit: number;
+  reason: string;
 }
