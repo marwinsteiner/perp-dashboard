@@ -109,7 +109,7 @@ export interface CurvePoint {
 
 // --- Window Management Types ---
 
-export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE' | 'MARS' | 'STRAT' | 'HELP' | 'SHOCK' | 'FLOW';
+export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE' | 'MARS' | 'STRAT' | 'HELP' | 'SHOCK' | 'FLOW' | 'OMS' | 'TICKET' | 'BLOTTER';
 
 export interface WindowState {
   id: string;
@@ -124,6 +124,8 @@ export interface WindowState {
   y: number;
   w: number;
   h: number;
+  // OMS Specific Context
+  contextData?: any; 
 }
 
 export interface ScreenConfig {
@@ -323,11 +325,19 @@ export interface FlowOrder {
     strategyId: string;
     symbol: string;
     side: 'BUY' | 'SELL';
-    price: number;
+    price: number; // 0 for Market
     size: number;
     status: 'FILLED' | 'CANCELED' | 'REJECTED' | 'NEW' | 'PARTIAL';
     timestamp: number;
     latencyMs: number;
+    
+    // OMS Specific
+    type?: 'LIMIT' | 'MARKET';
+    tif?: 'GTC' | 'IOC' | 'FOK';
+    traderId?: string;
+    venue?: string;
+    filledSize?: number;
+    avgFillPrice?: number;
 }
 
 export interface FlowAggregatedRow {

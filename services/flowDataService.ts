@@ -106,6 +106,19 @@ class FlowDataService {
         }, 2000);
     }
 
+    // Public method to inject manual orders from OMS
+    public injectOrder(order: FlowOrder) {
+        this.orders.push(order);
+        this.orders.sort((a,b) => b.timestamp - a.timestamp);
+        this.notify();
+    }
+
+    public injectFill(fill: FlowFill) {
+        this.fills.push(fill);
+        this.fills.sort((a,b) => b.timestamp - a.timestamp);
+        this.notify();
+    }
+
     public getFills(): FlowFill[] {
         // Return a copy to ensure React state reference equality checks trigger updates
         return [...this.fills].sort((a,b) => b.timestamp - a.timestamp);

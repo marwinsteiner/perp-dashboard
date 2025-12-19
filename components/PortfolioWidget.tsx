@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { usePortfolioData } from '../hooks/usePortfolioData';
 import { LivePosition, PortfolioGroup } from '../types';
@@ -21,13 +22,49 @@ interface DisplayGroup {
     totalGrossUsd: number;
 }
 
-const PortfolioWidget: React.FC = () => {
+interface PortfolioWidgetProps {
+    onOpenOMS?: (context: any) => void;
+}
+
+const PortfolioWidget: React.FC<PortfolioWidgetProps> = ({ onOpenOMS }) => {
   const { allPositions, metrics, carry, loading } = usePortfolioData();
   const [groupMode, setGroupMode] = useState<GroupMode>('ASSET');
   const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
 
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, pos: LivePosition } | null>(null);
+
   const toggleGroup = (key: string) => {
       setExpandedKeys(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleRightClick = (e: React.MouseEvent, pos: LivePosition) => {
+      e.preventDefault();
+      setContextMenu({ x: e.clientX, y: e.clientY, pos });
+  };
+
+  const closeMenu = () => setContextMenu(null);
+
+  const triggerOMS = (action: 'TRADE' | 'FLATTEN' | 'HALVE') => {
+      if (!contextMenu || !onOpenOMS) return;
+      const { pos } = contextMenu;
+      
+      let side = 'BUY'; 
+      // Default Trade action: no side pref, or maybe contra logic? Default BUY
+      // Flatten: Opposite of current side
+      if (action === 'FLATTEN' || action === 'HALVE') {
+          side = pos.side === 'LONG' ? 'SELL' : 'BUY';
+      }
+
+      onOpenOMS({
+          symbol: pos.symbol,
+          venue: pos.venue,
+          strategyId: pos.strategyId,
+          traderId: pos.traderId,
+          side: side,
+          // Could pass quantity intent here if OMS supported it, OMS widget will handle logic if needed
+      });
+      closeMenu();
   };
 
   // Generic Grouping Logic
@@ -88,19 +125,13 @@ const PortfolioWidget: React.FC = () => {
         const initial: Record<string, boolean> = {};
         displayGroups.forEach(g => initial[g.key] = true);
         if (Object.keys(expandedKeys).length === 0) setExpandedKeys(initial);
-      } else {
-        // Expand all by default for other modes too for visibility
-        const all: Record<string, boolean> = {};
-        displayGroups.forEach(g => all[g.key] = true);
-        // Only set if we changed modes effectively
-        // setExpandedKeys(all); 
       }
   }, [groupMode]);
 
   if (loading) return <div className="h-full flex items-center justify-center text-cyan-500 font-mono animate-pulse">CONNECTING TO PAPER ENGINE...</div>;
 
   return (
-    <div className="h-full flex flex-col bg-black font-mono text-xs overflow-hidden">
+    <div className="h-full flex flex-col bg-black font-mono text-xs overflow-hidden" onClick={closeMenu}>
         
         {/* TOP RISK STRIP */}
         <div className="flex items-center justify-between bg-neutral-900 border-b border-gray-800 p-2 shrink-0">
@@ -164,7 +195,7 @@ const PortfolioWidget: React.FC = () => {
         <div className="flex-1 flex min-h-0">
             
             {/* LEFT: MASTER GRID */}
-            <div className="flex-1 overflow-auto border-r border-gray-800">
+            <div className="flex-1 overflow-auto border-r border-gray-800 relative">
                 <table className="w-full text-left border-collapse">
                     <thead className="bg-neutral-900 sticky top-0 z-10 text-[10px] uppercase text-gray-500 shadow-sm">
                         <tr>
@@ -208,7 +239,11 @@ const PortfolioWidget: React.FC = () => {
 
                                     {/* POSITIONS */}
                                     {isExpanded && group.positions.map(pos => (
-                                        <tr key={pos.id} className="hover:bg-gray-900/30 text-gray-400 text-[11px]">
+                                        <tr 
+                                            key={pos.id} 
+                                            className="hover:bg-gray-900/30 text-gray-400 text-[11px] cursor-context-menu"
+                                            onContextMenu={(e) => handleRightClick(e, pos)}
+                                        >
                                             <td className="px-2 py-1 border-r border-gray-800"></td>
                                             <td className="px-2 py-1 border-r border-gray-800 flex items-center gap-2">
                                                 <span className={`w-1 h-3 shrink-0 ${pos.side === 'LONG' ? 'bg-green-500' : 'bg-red-500'}`}></span>
@@ -242,10 +277,42 @@ const PortfolioWidget: React.FC = () => {
                         })}
                     </tbody>
                 </table>
+
+                {/* CONTEXT MENU */}
+                {contextMenu && (
+                    <div 
+                        className="fixed z-50 bg-black border border-gray-700 shadow-xl py-1 rounded w-40 text-xs text-gray-300 animate-in fade-in duration-100"
+                        style={{ top: contextMenu.y, left: contextMenu.x }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-3 py-1.5 border-b border-gray-800 font-bold text-white bg-gray-900/50">
+                            {contextMenu.pos.symbol}
+                        </div>
+                        <button 
+                            onClick={() => triggerOMS('TRADE')}
+                            className="w-full text-left px-3 py-1.5 hover:bg-cyan-900/30 hover:text-cyan-400"
+                        >
+                            Trade...
+                        </button>
+                        <div className="my-1 border-t border-gray-800"></div>
+                        <button 
+                            onClick={() => triggerOMS('HALVE')}
+                            className="w-full text-left px-3 py-1.5 hover:bg-gray-800"
+                        >
+                            Halve Position
+                        </button>
+                        <button 
+                            onClick={() => triggerOMS('FLATTEN')}
+                            className="w-full text-left px-3 py-1.5 hover:bg-red-900/30 hover:text-red-400"
+                        >
+                            Flatten
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* RIGHT: RISK & BASIS PANEL */}
-            <div className="w-80 flex flex-col bg-gray-900/20">
+            <div className="w-80 flex flex-col bg-gray-900/20 border-l border-gray-800">
                 {/* Tenor Risk (Global) */}
                 <div className="p-2 border-b border-gray-800">
                     <h3 className="text-cyan-500 font-bold mb-2 uppercase text-[10px] tracking-wider">Global Tenor Risk</h3>
