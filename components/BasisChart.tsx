@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, CrosshairMode, LineStyle } from 'lightweight-charts';
 import BinanceService from '../services/binanceService';
@@ -19,6 +20,9 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
   const perpSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const basisSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
   const fundingSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+
+  // Store latest candle data to compute basis in real-time
+  const latestRef = useRef<{ spot: any, perp: any }>({ spot: null, perp: null });
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -100,8 +104,7 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
         }
     });
 
-    // D) Funding Rate (Overlay on Basis or Top?) - Let's put it on the Basis pane or a tiny strip
-    // Let's use markers on the time axis or a separate histogram on the basis pane
+    // D) Funding Rate
     const fundingSeries = chart.addHistogramSeries({
         color: '#f97316', // Orange
         priceScaleId: 'funding',
@@ -117,7 +120,10 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
         visible: false // Hide scale axis to avoid clutter, just show bars
     });
 
-    // 3. Load Data
+    // 3. Load Initial Data & Start Subscription
+    let unsubSpot: () => void;
+    let unsubFutures: () => void;
+
     const loadData = async () => {
         try {
             const [spotKlines, perpKlines, fundingHistory] = await Promise.all([
@@ -136,9 +142,11 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
                 open: k.open, high: k.high, low: k.low, close: k.close
             }));
 
+            // Sync refs for Basis calculation
+            if (spotData.length > 0) latestRef.current.spot = spotData[spotData.length - 1];
+            if (perpData.length > 0) latestRef.current.perp = perpData[perpData.length - 1];
+
             // Format Basis (Perp Close - Spot Close in BPS)
-            // We need to match timestamps. Klines should be roughly aligned if limits match.
-            // A more robust map intersection is ideal but for '1m' generic sync is okay.
             const basisData: any[] = [];
             const timestampMap = new Map<any, number>();
             spotData.forEach(s => timestampMap.set(s.time, s.close));
@@ -150,7 +158,6 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
                     basisData.push({
                         time: p.time,
                         value: basisBps,
-                        // Color the area based on value
                         topColor: basisBps > 0 ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.0)',
                         bottomColor: basisBps > 0 ? 'rgba(34, 197, 94, 0.0)' : 'rgba(239, 68, 68, 0.4)',
                         lineColor: basisBps > 0 ? '#22c55e' : '#ef4444'
@@ -169,6 +176,50 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
             perpSeries.setData(perpData);
             basisSeries.setData(basisData);
             fundingSeries.setData(fundingData);
+
+            // --- START WEBSOCKET SUBSCRIPTIONS ---
+            
+            const handleUpdate = () => {
+                // If we have both latest spot and perp for the same timeframe, update Basis
+                const s = latestRef.current.spot;
+                const p = latestRef.current.perp;
+                
+                if (s && p) {
+                    // Approximate matching of time to update basis real-time
+                    // Note: Candle times might drift slightly between exchanges in ms, but usually aligned to second
+                    // If times match (same minute start), we update.
+                    if (s.time === p.time) {
+                        const basisBps = ((p.close - s.close) / s.close) * 10000;
+                        basisSeries.update({
+                            time: p.time,
+                            value: basisBps,
+                            topColor: basisBps > 0 ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.0)',
+                            bottomColor: basisBps > 0 ? 'rgba(34, 197, 94, 0.0)' : 'rgba(239, 68, 68, 0.4)',
+                            lineColor: basisBps > 0 ? '#22c55e' : '#ef4444'
+                        });
+                    }
+                }
+            };
+
+            unsubSpot = service.subscribeKline(symbol, 'SPOT', timeframe, (k) => {
+                const candle = {
+                    time: k.openTime / 1000 as any,
+                    open: k.open, high: k.high, low: k.low, close: k.close
+                };
+                spotSeries.update(candle);
+                latestRef.current.spot = candle;
+                handleUpdate();
+            });
+
+            unsubFutures = service.subscribeKline(symbol, 'FUTURES', timeframe, (k) => {
+                const candle = {
+                    time: k.openTime / 1000 as any,
+                    open: k.open, high: k.high, low: k.low, close: k.close
+                };
+                perpSeries.update(candle);
+                latestRef.current.perp = candle;
+                handleUpdate();
+            });
 
         } catch (e) {
             console.error("Failed to load chart data", e);
@@ -190,6 +241,8 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      if (unsubSpot) unsubSpot();
+      if (unsubFutures) unsubFutures();
       chart.remove();
     };
   }, [symbol, timeframe]);
@@ -197,6 +250,9 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
   // Keyboard Shortcuts for Timeframe
   useEffect(() => {
       const handleKey = (e: KeyboardEvent) => {
+          // Only trigger if not typing in an input
+          if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
           if (e.key === '1') setTimeframe('1m');
           if (e.key === '2') setTimeframe('5m');
           if (e.key === '3') setTimeframe('15m');
@@ -211,11 +267,11 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
              <div className="bg-black/80 px-2 py-1 border border-gray-800 text-[10px] text-gray-400">
                 <span className="text-cyan-400 font-bold">{symbol}</span>
                 <span className="mx-2">|</span>
-                <span className={timeframe === '1m' ? 'text-white font-bold' : ''}>[1] 1m</span>
+                <button onClick={() => setTimeframe('1m')} className={`hover:text-white ${timeframe === '1m' ? 'text-white font-bold' : ''}`}>[1] 1m</button>
                 <span className="mx-1"></span>
-                <span className={timeframe === '5m' ? 'text-white font-bold' : ''}>[2] 5m</span>
+                <button onClick={() => setTimeframe('5m')} className={`hover:text-white ${timeframe === '5m' ? 'text-white font-bold' : ''}`}>[2] 5m</button>
                 <span className="mx-1"></span>
-                <span className={timeframe === '15m' ? 'text-white font-bold' : ''}>[3] 15m</span>
+                <button onClick={() => setTimeframe('15m')} className={`hover:text-white ${timeframe === '15m' ? 'text-white font-bold' : ''}`}>[3] 15m</button>
              </div>
         </div>
         

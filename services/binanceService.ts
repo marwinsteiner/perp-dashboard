@@ -1,3 +1,4 @@
+
 import { WebSocketMessage, SpotTicker, FuturesMark, OrderBook, OrderBookLevel, Trade, Kline, FuturesSymbolInfo } from '../types';
 
 type SpotCallback = (data: SpotTicker) => void;
@@ -5,6 +6,7 @@ type FuturesCallback = (data: FuturesMark) => void;
 type DepthCallback = (data: { type: 'SPOT' | 'FUTURES', bids: [string, string][], asks: [string, string][] }) => void;
 type TradeCallback = (data: Trade) => void;
 type MultiTickerCallback = (data: { symbol: string, price: number }) => void;
+type KlineCallback = (data: Kline) => void;
 
 class BinanceService {
   private spotWs: WebSocket | null = null;
@@ -185,6 +187,38 @@ class BinanceService {
     }
   }
 
+  // --- Kline Streaming (Charts) ---
+
+  public subscribeKline(symbol: string, type: 'SPOT' | 'FUTURES', interval: string, callback: KlineCallback) {
+    const streamName = `${symbol.toLowerCase()}@kline_${interval}`;
+    const baseUrl = type === 'SPOT' 
+        ? 'wss://stream.binance.com:9443/ws/'
+        : 'wss://fstream.binance.com/ws/';
+
+    const ws = new WebSocket(`${baseUrl}${streamName}`);
+    ws.onmessage = (e) => {
+        try {
+            const msg = JSON.parse(e.data);
+            if (msg.e === 'kline') {
+                const k = msg.k;
+                callback({
+                    openTime: k.t,
+                    open: parseFloat(k.o),
+                    high: parseFloat(k.h),
+                    low: parseFloat(k.l),
+                    close: parseFloat(k.c),
+                    volume: parseFloat(k.v),
+                    closeTime: k.T
+                });
+            }
+        } catch (err) {
+            console.error('Kline parse error', err);
+        }
+    };
+    
+    return () => ws.close();
+  }
+
   // --- Futures Curve Logic ---
 
   public async getFuturesExchangeInfo(): Promise<FuturesSymbolInfo[]> {
@@ -286,22 +320,6 @@ class BinanceService {
 
   public subscribeCurveTickers(symbols: string[], callback: MultiTickerCallback) {
     if (this.curveWs) this.curveWs.close();
-
-    // Check if we have symbols. If mixed (USDT vs COIN), we need 2 sockets, 
-    // but here we simplify by assuming this method handles the main USDT-M stream primarily,
-    // or we can allow the hook to manage connection types.
-    // For simplicity, let's assume 'symbols' passed here are USDT-M only.
-    // We will create a separate method for Coin-M or just let REST handle the illiquid ones for now?
-    // Actually, 'bookTicker' updates are frequent. We should try to stream if possible.
-    // But mixing streams in one method is tricky if base URLs differ.
-    // Let's rely on the initial fetch for Coin-M (since they are slow moving) 
-    // OR create a quick secondary socket inside the hook if needed. 
-    // Given the request complexity, sticking to USDT-M stream + REST for all initial is a good balance.
-    // We will stick to USDT-M streaming here. 
-    
-    // NOTE: To support real-time Coin-M updates, we'd need a separate WS connection to dstream.binance.com.
-    // For this implementation, we will rely on the initial REST fetch for Coin-M levels (often illiquid/slow)
-    // and stream the USDT-M items.
     
     const streams = symbols.map(s => `${s.toLowerCase()}@bookTicker`).join('/');
     const url = `wss://fstream.binance.com/ws/${streams}`;

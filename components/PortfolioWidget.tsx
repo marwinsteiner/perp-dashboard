@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { usePortfolioData } from '../hooks/usePortfolioData';
 import { LivePosition, PortfolioGroup } from '../types';
 
@@ -9,13 +9,93 @@ const formatPnl = (n: number) => {
     return n >= 0 ? `+${s}` : s;
 };
 
-const PortfolioWidget: React.FC = () => {
-  const { groups, metrics, carry, loading } = usePortfolioData();
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({ 'BTC': true, 'ETH': true });
+type GroupMode = 'ASSET' | 'STRATEGY' | 'TRADER' | 'VENUE';
 
-  const toggleGroup = (base: string) => {
-      setExpandedGroups(prev => ({ ...prev, [base]: !prev[base] }));
+interface DisplayGroup {
+    key: string;
+    label: string;
+    positions: LivePosition[];
+    netDeltaBase: number;
+    netDeltaUsd: number;
+    totalPnl: number;
+    totalGrossUsd: number;
+}
+
+const PortfolioWidget: React.FC = () => {
+  const { allPositions, metrics, carry, loading } = usePortfolioData();
+  const [groupMode, setGroupMode] = useState<GroupMode>('ASSET');
+  const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
+
+  const toggleGroup = (key: string) => {
+      setExpandedKeys(prev => ({ ...prev, [key]: !prev[key] }));
   };
+
+  // Generic Grouping Logic
+  const displayGroups: DisplayGroup[] = useMemo(() => {
+      if (!allPositions.length) return [];
+
+      const groups: Record<string, LivePosition[]> = {};
+      const labels: Record<string, string> = {};
+      
+      allPositions.forEach(p => {
+          let key = '';
+          let label = '';
+          
+          if (groupMode === 'ASSET') {
+              key = p.baseAsset;
+              label = p.baseAsset;
+          } else if (groupMode === 'STRATEGY') {
+              key = p.strategyId || 'UNASSIGNED';
+              label = key.replace(/_/g, ' ');
+          } else if (groupMode === 'TRADER') {
+              key = p.traderId || 'HOUSE';
+              label = key;
+          } else if (groupMode === 'VENUE') {
+              key = p.venue;
+              label = key.replace(/_/g, ' ');
+          }
+
+          if (!groups[key]) {
+            groups[key] = [];
+            labels[key] = label;
+          }
+          groups[key].push(p);
+      });
+
+      return Object.entries(groups).map(([key, positions]) => {
+          const netDeltaBase = positions.reduce((acc, p) => acc + (p.side === 'LONG' ? p.quantity : -p.quantity), 0);
+          const netDeltaUsd = positions.reduce((acc, p) => acc + (p.side === 'LONG' ? p.notionalUsd : -p.notionalUsd), 0);
+          const totalPnl = positions.reduce((acc, p) => acc + p.unrealizedPnl, 0);
+          const totalGrossUsd = positions.reduce((acc, p) => acc + p.notionalUsd, 0);
+          const label = labels[key];
+
+          return {
+              key,
+              label: groupMode === 'ASSET' ? `${label} NET` : label,
+              positions,
+              netDeltaBase,
+              netDeltaUsd,
+              totalPnl,
+              totalGrossUsd
+          };
+      }).sort((a,b) => b.totalGrossUsd - a.totalGrossUsd); // Sort by Size
+
+  }, [allPositions, groupMode]);
+
+  // Set initial expansion for Asset mode
+  useMemo(() => {
+      if (groupMode === 'ASSET') {
+        const initial: Record<string, boolean> = {};
+        displayGroups.forEach(g => initial[g.key] = true);
+        if (Object.keys(expandedKeys).length === 0) setExpandedKeys(initial);
+      } else {
+        // Expand all by default for other modes too for visibility
+        const all: Record<string, boolean> = {};
+        displayGroups.forEach(g => all[g.key] = true);
+        // Only set if we changed modes effectively
+        // setExpandedKeys(all); 
+      }
+  }, [groupMode]);
 
   if (loading) return <div className="h-full flex items-center justify-center text-cyan-500 font-mono animate-pulse">CONNECTING TO PAPER ENGINE...</div>;
 
@@ -61,16 +141,35 @@ const PortfolioWidget: React.FC = () => {
             </div>
         </div>
 
+        {/* HEADER & FILTER BAR */}
+        <div className="bg-neutral-900/50 border-b border-gray-800 p-1 px-2 flex items-center gap-2">
+            <span className="text-gray-500 text-[10px] uppercase font-bold mr-2">Group By:</span>
+            {(['ASSET', 'STRATEGY', 'TRADER', 'VENUE'] as GroupMode[]).map(mode => (
+                <button
+                    key={mode}
+                    onClick={() => setGroupMode(mode)}
+                    className={`
+                        px-2 py-0.5 text-[9px] font-bold uppercase border rounded-sm transition-all
+                        ${groupMode === mode 
+                            ? 'bg-cyan-900 border-cyan-500 text-cyan-100' 
+                            : 'bg-black border-gray-700 text-gray-500 hover:text-white hover:border-gray-500'}
+                    `}
+                >
+                    {mode}
+                </button>
+            ))}
+        </div>
+
         {/* MAIN SPLIT */}
         <div className="flex-1 flex min-h-0">
             
             {/* LEFT: MASTER GRID */}
             <div className="flex-1 overflow-auto border-r border-gray-800">
                 <table className="w-full text-left border-collapse">
-                    <thead className="bg-neutral-900 sticky top-0 z-10 text-[10px] uppercase text-gray-500">
+                    <thead className="bg-neutral-900 sticky top-0 z-10 text-[10px] uppercase text-gray-500 shadow-sm">
                         <tr>
                             <th className="px-2 py-1 border-r border-gray-800 w-8"></th>
-                            <th className="px-2 py-1 border-r border-gray-800">Instrument</th>
+                            <th className="px-2 py-1 border-r border-gray-800 w-32">Group / Inst</th>
                             <th className="px-2 py-1 border-r border-gray-800 text-right">Qty</th>
                             <th className="px-2 py-1 border-r border-gray-800 text-right">Value ($)</th>
                             <th className="px-2 py-1 border-r border-gray-800 text-right">Entry</th>
@@ -80,21 +179,25 @@ const PortfolioWidget: React.FC = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-900/50">
-                        {groups.map(group => {
-                            const isExpanded = expandedGroups[group.baseAsset];
+                        {displayGroups.map(group => {
+                            const isExpanded = expandedKeys[group.key];
                             return (
-                                <React.Fragment key={group.baseAsset}>
+                                <React.Fragment key={group.key}>
                                     {/* GROUP HEADER */}
                                     <tr 
-                                        onClick={() => toggleGroup(group.baseAsset)}
-                                        className="bg-gray-900 hover:bg-gray-800 cursor-pointer text-gray-300 font-bold"
+                                        onClick={() => toggleGroup(group.key)}
+                                        className="bg-gray-900 hover:bg-gray-800 cursor-pointer text-gray-300 font-bold border-b border-gray-800"
                                     >
                                         <td className="px-2 py-1 text-center text-[10px]">{isExpanded ? '▼' : '▶'}</td>
-                                        <td className="px-2 py-1 text-cyan-400">{group.baseAsset} NET</td>
-                                        <td className={`px-2 py-1 text-right ${group.netDeltaBase > 0 ? 'text-blue-400' : 'text-orange-400'}`}>
-                                            {formatQty(group.netDeltaBase)}
+                                        <td className="px-2 py-1 text-cyan-400 font-mono truncate">{group.label}</td>
+                                        
+                                        {/* Dynamic Columns based on Group Mode logic */}
+                                        <td className={`px-2 py-1 text-right ${group.netDeltaBase > 0 ? 'text-blue-400' : group.netDeltaBase < 0 ? 'text-orange-400' : 'text-gray-500'}`}>
+                                            {groupMode === 'ASSET' ? formatQty(group.netDeltaBase) : '---'}
                                         </td>
-                                        <td className="px-2 py-1 text-right text-gray-500 italic">---</td>
+                                        <td className="px-2 py-1 text-right text-gray-300">
+                                            {formatUSD(group.totalGrossUsd)}
+                                        </td>
                                         <td className="px-2 py-1 text-right text-gray-500 italic">---</td>
                                         <td className="px-2 py-1 text-right text-gray-500 italic">---</td>
                                         <td className={`px-2 py-1 text-right ${group.totalPnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
@@ -105,13 +208,14 @@ const PortfolioWidget: React.FC = () => {
 
                                     {/* POSITIONS */}
                                     {isExpanded && group.positions.map(pos => (
-                                        <tr key={pos.id} className="hover:bg-gray-900/30 text-gray-400">
+                                        <tr key={pos.id} className="hover:bg-gray-900/30 text-gray-400 text-[11px]">
                                             <td className="px-2 py-1 border-r border-gray-800"></td>
                                             <td className="px-2 py-1 border-r border-gray-800 flex items-center gap-2">
-                                                <span className={`w-1 h-3 ${pos.side === 'LONG' ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                                <span className={pos.venue === 'SPOT' ? 'text-white' : 'text-yellow-500'}>
-                                                    {pos.venue.replace('_USDT','')}
-                                                </span>
+                                                <span className={`w-1 h-3 shrink-0 ${pos.side === 'LONG' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                                <div className="flex flex-col leading-none">
+                                                    <span className="text-white font-bold">{pos.symbol.replace('USDT','')}</span>
+                                                    <span className="text-[9px] text-gray-600">{pos.venue.replace('_USDT','')}</span>
+                                                </div>
                                             </td>
                                             <td className="px-2 py-1 border-r border-gray-800 text-right font-mono">
                                                 {formatQty(pos.quantity)}
@@ -142,14 +246,14 @@ const PortfolioWidget: React.FC = () => {
 
             {/* RIGHT: RISK & BASIS PANEL */}
             <div className="w-80 flex flex-col bg-gray-900/20">
-                {/* Tenor Buckets */}
+                {/* Tenor Risk (Global) */}
                 <div className="p-2 border-b border-gray-800">
-                    <h3 className="text-cyan-500 font-bold mb-2 uppercase text-[10px] tracking-wider">Tenor Risk Buckets</h3>
+                    <h3 className="text-cyan-500 font-bold mb-2 uppercase text-[10px] tracking-wider">Global Tenor Risk</h3>
                     <div className="space-y-2">
-                        <RiskBucketRow label="SPOT / CASH" delta={groups.reduce((a,g) => a + g.positions.filter(p=>p.venue==='SPOT').reduce((x,y)=>x+y.notionalUsd,0), 0)} />
-                        <RiskBucketRow label="PERP (0d)" delta={groups.reduce((a,g) => a - g.positions.filter(p=>p.venue.includes('PERP')).reduce((x,y)=>x+y.notionalUsd,0), 0)} />
+                        <RiskBucketRow label="SPOT / CASH" delta={allPositions.filter(p=>p.venue==='SPOT').reduce((x,y)=>x+y.notionalUsd,0)} />
+                        <RiskBucketRow label="PERP (0d)" delta={allPositions.filter(p=>p.venue.includes('PERP')).reduce((x,y)=>x + (y.side==='SHORT'? -y.notionalUsd : y.notionalUsd), 0)} />
                         <RiskBucketRow label="FUTURES (<30d)" delta={0} /> 
-                        <RiskBucketRow label="FUTURES (>30d)" delta={groups.reduce((a,g) => a - g.positions.filter(p=>p.venue.includes('FUTURE')).reduce((x,y)=>x+y.notionalUsd,0), 0)} />
+                        <RiskBucketRow label="FUTURES (>30d)" delta={allPositions.filter(p=>p.venue.includes('FUTURE')).reduce((x,y)=>x + (y.side==='SHORT'? -y.notionalUsd : y.notionalUsd), 0)} />
                     </div>
                 </div>
 
