@@ -109,7 +109,7 @@ export interface CurvePoint {
 
 // --- Window Management Types ---
 
-export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE' | 'MARS';
+export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE' | 'MARS' | 'STRAT' | 'HELP';
 
 export interface WindowState {
   id: string;
@@ -214,5 +214,50 @@ export interface RiskOverrideLog {
   user: string;
   oldLimit: number;
   newLimit: number;
+  reason: string;
+}
+
+// --- STRAT (Strategy Management) Types ---
+
+export type StrategyState = 'RUNNING' | 'PAUSED' | 'DRAINING' | 'ERROR';
+
+export interface StrategyInstance {
+  id: string;
+  name: string;
+  family: string;
+  desk: string;
+  owner: string;
+  venues: string[];
+  instruments: string[];
+  state: StrategyState;
+  
+  // Operational Health (Mocked)
+  rejectRate: number; // %
+  avgSlippageBps: number;
+  medianTimeToFillMs: number;
+  lastTickAgeMs: number;
+  
+  // Performance (Mocked/Aggregated)
+  pnlDay: number;
+  pnlMtd: number;
+  hitRate: number; // %
+  avgTradeSizeUsd: number;
+  sharpeRatio: number;
+  profitFactor: number;
+
+  riskFlags: string[];
+
+  // Live Aggregate Notional (Injected by Hook)
+  grossNotionalUsd?: number;
+  netNotionalUsd?: number;
+}
+
+export interface StrategyLog {
+  timestamp: number;
+  strategyId: string;
+  user: string;
+  action: string;
+  oldState?: string;
+  newState?: string;
   reason: string;
 }

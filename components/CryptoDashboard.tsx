@@ -9,6 +9,8 @@ import FocusPane from './FocusPane';
 import BasisChart from './BasisChart';
 import TermStructureChart from './TermStructureChart';
 import RiskLimitsWidget from './RiskLimitsWidget';
+import StrategyHealthWidget from './StrategyHealthWidget';
+import HelpWidget from './HelpWidget';
 import SaveScreenModal from './SaveScreenModal';
 import BinanceService from '../services/binanceService';
 import { useFuturesCurve } from '../hooks/useFuturesCurve';
@@ -77,7 +79,11 @@ const CryptoDashboard: React.FC = () => {
     const id = uuidv4();
     const title = symbol 
         ? `${type}: ${symbol.replace('USDT','')}` 
-        : type === 'SCREENER' ? 'CRYPTO SCREENER' : type === 'PORTFOLIO' ? 'PORTFOLIO' : 'MARS RISK SYSTEM';
+        : type === 'SCREENER' ? 'CRYPTO SCREENER' 
+        : type === 'PORTFOLIO' ? 'PORTFOLIO' 
+        : type === 'MARS' ? 'MARS RISK SYSTEM' 
+        : type === 'STRAT' ? 'STRATEGY HEALTH'
+        : 'TERMINAL DOCUMENTATION';
     
     const newWin: WindowState = {
         id,
@@ -215,6 +221,12 @@ const CryptoDashboard: React.FC = () => {
       } else if (cmd === 'MARS') {
           const existing = windows.find(w => w.type === 'MARS');
           existing ? handleTabClick(existing.id) : createWindow('MARS');
+      } else if (cmd === 'STRAT') {
+          const existing = windows.find(w => w.type === 'STRAT');
+          existing ? handleTabClick(existing.id) : createWindow('STRAT');
+      } else if (cmd === 'H' || cmd === 'HELP') {
+          const existing = windows.find(w => w.type === 'HELP');
+          existing ? handleTabClick(existing.id) : createWindow('HELP');
       } else if (cmd.startsWith('F ')) {
           createWindow('FOCUS', cmd.substring(2).trim() + 'USDT');
       } else if (cmd.startsWith('C ')) {
@@ -226,12 +238,28 @@ const CryptoDashboard: React.FC = () => {
       }
   };
 
+  const handleHelpTrigger = (cmd: string) => {
+    // Open command bar and pre-fill
+    setCommandInput(cmd + ' ');
+    setCommandMode(true);
+    setTimeout(() => {
+        if (cmdInputRef.current) {
+            cmdInputRef.current.focus();
+            // Move cursor to end
+            const val = cmdInputRef.current.value;
+            cmdInputRef.current.setSelectionRange(val.length, val.length);
+        }
+    }, 50);
+  };
+
   const renderContent = (w: WindowState, isActiveContext: boolean) => {
       switch (w.type) {
           case 'SCREENER': 
             return <WatchlistWidget isActiveContext={isActiveContext} onSelectSymbol={(sym) => createWindow('FOCUS', sym)} />;
           case 'PORTFOLIO': return <PortfolioWidget />;
           case 'MARS': return <RiskLimitsWidget />;
+          case 'STRAT': return <StrategyHealthWidget />;
+          case 'HELP': return <HelpWidget onTriggerCommand={handleHelpTrigger} />;
           case 'FOCUS': return w.symbol ? <FocusWrapper symbol={w.symbol} /> : null;
           case 'CHART': return w.symbol ? <ChartWrapper symbol={w.symbol} /> : null;
           case 'CURVE': return w.symbol ? <CurveWrapper symbol={w.symbol} /> : null;
@@ -272,7 +300,7 @@ const CryptoDashboard: React.FC = () => {
                       </div>
                   </div>
               ))}
-              <button onClick={() => createWindow('PORTFOLIO')} className="px-2 h-6 text-gray-600 hover:text-cyan-500 text-lg leading-none">+</button>
+              <button onClick={() => handleHelpTrigger('')} className="px-2 h-6 text-gray-600 hover:text-cyan-500 text-lg leading-none">+</button>
           </div>
       </div>
 
@@ -314,14 +342,15 @@ const CryptoDashboard: React.FC = () => {
               <div className="text-[10px] text-amber-600 font-bold mb-1 uppercase tracking-wider">Execute Command</div>
               <div className="flex items-center gap-2">
                   <span className="text-amber-500 font-bold text-xl">/</span>
-                  <input ref={cmdInputRef} type="text" className="flex-1 bg-transparent border-none outline-none text-xl font-mono text-amber-500 uppercase" placeholder="CMD (E.G. MARS, PORT, F BTC)"
+                  <input ref={cmdInputRef} type="text" className="flex-1 bg-transparent border-none outline-none text-xl font-mono text-amber-500 uppercase" placeholder="CMD (E.G. H, STRAT, MARS)"
                     value={commandInput} onChange={e => setCommandInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && executeCommand()}
                   />
               </div>
               <div className="mt-2 text-[10px] text-gray-500 flex gap-4 uppercase">
+                  <span><strong className="text-gray-300">H</strong> HELP</span>
+                  <span><strong className="text-gray-300">STRAT</strong> HEALTH</span>
                   <span><strong className="text-gray-300">MARS</strong> RISK MGT</span>
                   <span><strong className="text-gray-300">PORT</strong> PORTFOLIO</span>
-                  <span><strong className="text-gray-300">CS</strong> SCREENER</span>
               </div>
           </div>
       )}
