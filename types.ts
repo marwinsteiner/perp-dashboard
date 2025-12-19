@@ -109,7 +109,7 @@ export interface CurvePoint {
 
 // --- Window Management Types ---
 
-export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE' | 'MARS' | 'STRAT' | 'HELP' | 'SHOCK';
+export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE' | 'MARS' | 'STRAT' | 'HELP' | 'SHOCK' | 'FLOW';
 
 export interface WindowState {
   id: string;
@@ -298,4 +298,60 @@ export interface ShockResultNode {
   isMarginCall: boolean; // Mock metric
 
   children?: ShockResultNode[];
+}
+
+// --- FLOW (Execution Analytics) Types ---
+
+export interface FlowFill {
+    id: string;
+    orderId: string;
+    strategyId: string;
+    symbol: string;
+    side: 'BUY' | 'SELL';
+    price: number;
+    size: number;
+    notional: number;
+    slippageBps: number; // vs arrival mid
+    fee: number;
+    timestamp: number;
+    liquidity: 'MAKER' | 'TAKER';
+    venue: string;
+}
+
+export interface FlowOrder {
+    id: string;
+    strategyId: string;
+    symbol: string;
+    side: 'BUY' | 'SELL';
+    price: number;
+    size: number;
+    status: 'FILLED' | 'CANCELED' | 'REJECTED' | 'NEW' | 'PARTIAL';
+    timestamp: number;
+    latencyMs: number;
+}
+
+export interface FlowAggregatedRow {
+    key: string; // Grouping Key
+    label: string;
+    
+    // Volume & Counts
+    totalNotional: number;
+    totalVolume: number;
+    fillCount: number;
+    orderCount: number;
+    
+    // Directional
+    netNotional: number; // +Buy, -Sell
+    buyNotional: number;
+    sellNotional: number;
+
+    // Execution Quality
+    avgSlippageBps: number;
+    medianSlippageBps: number;
+    fillRatio: number; // Fills / Orders (Simple view)
+    takerPct: number; // % of volume taken
+    rejectRate: number; // % of orders rejected
+    
+    // Timing
+    avgLatencyMs: number;
 }

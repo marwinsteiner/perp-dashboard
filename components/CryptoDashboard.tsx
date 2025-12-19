@@ -11,6 +11,7 @@ import TermStructureChart from './TermStructureChart';
 import RiskLimitsWidget from './RiskLimitsWidget';
 import StrategyHealthWidget from './StrategyHealthWidget';
 import ShockWidget from './ShockWidget';
+import FlowWidget from './FlowWidget';
 import HelpWidget from './HelpWidget';
 import SaveScreenModal from './SaveScreenModal';
 import BinanceService from '../services/binanceService';
@@ -89,6 +90,7 @@ const CryptoDashboard: React.FC = () => {
             case 'MARS': title = 'MARS RISK SYSTEM'; break;
             case 'STRAT': title = 'STRATEGY HEALTH'; break;
             case 'SHOCK': title = 'SCENARIO ANALYSIS'; break;
+            case 'FLOW': title = 'EXECUTION ANALYTICS'; break;
             case 'HELP': title = 'TERMINAL DOCUMENTATION'; break;
             default: title = 'WINDOW';
         }
@@ -236,6 +238,9 @@ const CryptoDashboard: React.FC = () => {
       } else if (cmd === 'SHOCK') {
           const existing = windows.find(w => w.type === 'SHOCK');
           existing ? handleTabClick(existing.id) : createWindow('SHOCK');
+      } else if (cmd === 'FLOW') {
+          const existing = windows.find(w => w.type === 'FLOW');
+          existing ? handleTabClick(existing.id) : createWindow('FLOW');
       } else if (cmd === 'H' || cmd === 'HELP') {
           const existing = windows.find(w => w.type === 'HELP');
           existing ? handleTabClick(existing.id) : createWindow('HELP');
@@ -272,6 +277,7 @@ const CryptoDashboard: React.FC = () => {
           case 'MARS': return <RiskLimitsWidget />;
           case 'STRAT': return <StrategyHealthWidget />;
           case 'SHOCK': return <ShockWidget />;
+          case 'FLOW': return <FlowWidget />;
           case 'HELP': return <HelpWidget onTriggerCommand={handleHelpTrigger} />;
           case 'FOCUS': return w.symbol ? <FocusWrapper symbol={w.symbol} /> : null;
           case 'CHART': return w.symbol ? <ChartWrapper symbol={w.symbol} /> : null;
@@ -355,12 +361,12 @@ const CryptoDashboard: React.FC = () => {
               <div className="text-[10px] text-amber-600 font-bold mb-1 uppercase tracking-wider">Execute Command</div>
               <div className="flex items-center gap-2">
                   <span className="text-amber-500 font-bold text-xl">/</span>
-                  <input ref={cmdInputRef} type="text" className="flex-1 bg-transparent border-none outline-none text-xl font-mono text-amber-500 uppercase" placeholder="CMD (E.G. SHOCK, STRAT, MARS)"
+                  <input ref={cmdInputRef} type="text" className="flex-1 bg-transparent border-none outline-none text-xl font-mono text-amber-500 uppercase" placeholder="CMD (E.G. FLOW, MARS)"
                     value={commandInput} onChange={e => setCommandInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && executeCommand()}
                   />
               </div>
               <div className="mt-2 text-[10px] text-gray-500 flex gap-4 uppercase">
-                  <span><strong className="text-gray-300">SHOCK</strong> SCENARIO</span>
+                  <span><strong className="text-gray-300">FLOW</strong> ANALYTICS</span>
                   <span><strong className="text-gray-300">STRAT</strong> HEALTH</span>
                   <span><strong className="text-gray-300">MARS</strong> RISK</span>
                   <span><strong className="text-gray-300">PORT</strong> PORTFOLIO</span>
