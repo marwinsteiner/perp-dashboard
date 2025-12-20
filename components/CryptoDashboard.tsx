@@ -10,15 +10,13 @@ import BasisChart from './BasisChart';
 import TermStructureChart from './TermStructureChart';
 import RiskLimitsWidget from './RiskLimitsWidget';
 import StrategyHealthWidget from './StrategyHealthWidget';
-import ShockWidget from './ShockWidget';
-import FlowWidget from './FlowWidget';
-import OMSWidget from './OMSWidget';
-import OrderTicket from './OrderTicket';
-import WorkingBlotter from './WorkingBlotter';
 import HelpWidget from './HelpWidget';
+import CoreInfraWidget from './CoreInfraWidget';
+import AccountManagerWidget from './AccountManagerWidget';
 import SaveScreenModal from './SaveScreenModal';
 import BinanceService from '../services/binanceService';
 import { useFuturesCurve } from '../hooks/useFuturesCurve';
+import auditLogService from '../services/auditLogService';
 
 // --- SERVICE WRAPPERS ---
 
@@ -78,56 +76,39 @@ const CryptoDashboard: React.FC = () => {
               console.error("Failed to parse saved screens", e);
           }
       }
+      auditLogService.log('SYSTEM', 'SYSTEM', 'Dashboard Initialized.');
   }, []);
 
-  const createWindow = (type: ViewType, symbol?: string, contextData?: any) => {
+  const createWindow = (type: ViewType, symbol?: string) => {
     const id = uuidv4();
-    let title = '';
-
-    if (symbol) {
-        title = `${type}: ${symbol.replace('USDT','')}`;
-    } else {
-        switch(type) {
-            case 'SCREENER': title = 'CRYPTO SCREENER'; break;
-            case 'PORTFOLIO': title = 'PORTFOLIO'; break;
-            case 'MARS': title = 'MARS RISK SYSTEM'; break;
-            case 'STRAT': title = 'STRATEGY HEALTH'; break;
-            case 'SHOCK': title = 'SCENARIO ANALYSIS'; break;
-            case 'FLOW': title = 'EXECUTION ANALYTICS'; break;
-            case 'OMS': title = 'ORDER MANAGEMENT'; break;
-            case 'TICKET': title = 'ORDER TICKET'; break;
-            case 'BLOTTER': title = 'WORKING BLOTTER'; break;
-            case 'HELP': title = 'TERMINAL DOCUMENTATION'; break;
-            default: title = 'WINDOW';
-        }
-    }
+    const title = symbol 
+        ? `${type}: ${symbol.replace('USDT','')}` 
+        : type === 'SCREENER' ? 'CRYPTO SCREENER' 
+        : type === 'PORTFOLIO' ? 'PORTFOLIO' 
+        : type === 'MARS' ? 'MARS RISK SYSTEM' 
+        : type === 'STRAT' ? 'STRATEGY HEALTH'
+        : type === 'CORE' ? 'CORE INFRA'
+        : type === 'ACCT' ? 'ACCOUNT REGISTRY'
+        : 'TERMINAL DOCUMENTATION';
     
-    // Default dimensions
-    let w = 600;
-    let h = 400;
-    if (type === 'TICKET') { w = 350; h = 500; }
-    if (type === 'BLOTTER') { w = 800; h = 300; }
-
     const newWin: WindowState = {
         id,
         type,
         title,
         symbol,
-        contextData,
-        isFloating: type === 'TICKET' || type === 'BLOTTER', // Default these to floating
+        isFloating: false,
         isMinimized: false,
         zIndex: Math.max(0, ...windows.map(w => w.zIndex)) + 1,
         x: 100 + (windows.length * 20),
         y: 100 + (windows.length * 20),
-        w,
-        h
+        w: 600,
+        h: 400
     };
 
     setWindows(prev => [...prev, newWin]);
-    if (!newWin.isFloating) {
-        setActiveTabId(id);
-        setMaximizedTabId(id);
-    }
+    setActiveTabId(id);
+    setMaximizedTabId(id);
+    auditLogService.log('UI', 'COMMAND', `Created window: ${type} ${symbol || ''}`);
   };
 
   const closeWindow = (id: string) => {
@@ -203,6 +184,7 @@ const CryptoDashboard: React.FC = () => {
       setWindows(screen.windows);
       setActiveTabId(screen.activeTabId);
       setMaximizedTabId(null); 
+      auditLogService.log('UI', 'COMMAND', `Loaded workspace: ${screen.name}`);
   };
 
   const handleTabClick = (id: string) => {
@@ -237,6 +219,8 @@ const CryptoDashboard: React.FC = () => {
       const cmd = commandInput.toUpperCase().trim();
       setCommandMode(false);
       setCommandInput('');
+      
+      auditLogService.log('UI', 'COMMAND', `Executing: /${cmd}`);
 
       if (cmd === 'CS') {
           const existing = windows.find(w => w.type === 'SCREENER');
@@ -250,18 +234,12 @@ const CryptoDashboard: React.FC = () => {
       } else if (cmd === 'STRAT') {
           const existing = windows.find(w => w.type === 'STRAT');
           existing ? handleTabClick(existing.id) : createWindow('STRAT');
-      } else if (cmd === 'SHOCK') {
-          const existing = windows.find(w => w.type === 'SHOCK');
-          existing ? handleTabClick(existing.id) : createWindow('SHOCK');
-      } else if (cmd === 'FLOW') {
-          const existing = windows.find(w => w.type === 'FLOW');
-          existing ? handleTabClick(existing.id) : createWindow('FLOW');
-      } else if (cmd === 'OMS') {
-          createWindow('OMS');
-      } else if (cmd === 'TICKET') {
-          createWindow('TICKET');
-      } else if (cmd === 'BLOTTER') {
-          createWindow('BLOTTER');
+      } else if (cmd === 'CORE') {
+          const existing = windows.find(w => w.type === 'CORE');
+          existing ? handleTabClick(existing.id) : createWindow('CORE');
+      } else if (cmd === 'ACCT') {
+          const existing = windows.find(w => w.type === 'ACCT');
+          existing ? handleTabClick(existing.id) : createWindow('ACCT');
       } else if (cmd === 'H' || cmd === 'HELP') {
           const existing = windows.find(w => w.type === 'HELP');
           existing ? handleTabClick(existing.id) : createWindow('HELP');
@@ -277,13 +255,11 @@ const CryptoDashboard: React.FC = () => {
   };
 
   const handleHelpTrigger = (cmd: string) => {
-    // Open command bar and pre-fill
     setCommandInput(cmd + ' ');
     setCommandMode(true);
     setTimeout(() => {
         if (cmdInputRef.current) {
             cmdInputRef.current.focus();
-            // Move cursor to end
             const val = cmdInputRef.current.value;
             cmdInputRef.current.setSelectionRange(val.length, val.length);
         }
@@ -294,14 +270,11 @@ const CryptoDashboard: React.FC = () => {
       switch (w.type) {
           case 'SCREENER': 
             return <WatchlistWidget isActiveContext={isActiveContext} onSelectSymbol={(sym) => createWindow('FOCUS', sym)} />;
-          case 'PORTFOLIO': return <PortfolioWidget onOpenOMS={(ctx) => createWindow('OMS', undefined, ctx)} />;
+          case 'PORTFOLIO': return <PortfolioWidget />;
           case 'MARS': return <RiskLimitsWidget />;
           case 'STRAT': return <StrategyHealthWidget />;
-          case 'SHOCK': return <ShockWidget />;
-          case 'FLOW': return <FlowWidget />;
-          case 'OMS': return <OMSWidget contextData={w.contextData} onPopOut={(type) => createWindow(type, undefined, w.contextData)} />;
-          case 'TICKET': return <OrderTicket contextData={w.contextData} isPoppedOut={true} />;
-          case 'BLOTTER': return <WorkingBlotter isPoppedOut={true} />;
+          case 'CORE': return <CoreInfraWidget />;
+          case 'ACCT': return <AccountManagerWidget />;
           case 'HELP': return <HelpWidget onTriggerCommand={handleHelpTrigger} />;
           case 'FOCUS': return w.symbol ? <FocusWrapper symbol={w.symbol} /> : null;
           case 'CHART': return w.symbol ? <ChartWrapper symbol={w.symbol} /> : null;
@@ -385,14 +358,15 @@ const CryptoDashboard: React.FC = () => {
               <div className="text-[10px] text-amber-600 font-bold mb-1 uppercase tracking-wider">Execute Command</div>
               <div className="flex items-center gap-2">
                   <span className="text-amber-500 font-bold text-xl">/</span>
-                  <input ref={cmdInputRef} type="text" className="flex-1 bg-transparent border-none outline-none text-xl font-mono text-amber-500 uppercase" placeholder="CMD (E.G. FLOW, MARS)"
+                  <input ref={cmdInputRef} type="text" className="flex-1 bg-transparent border-none outline-none text-xl font-mono text-amber-500 uppercase" placeholder="CMD (E.G. CORE, ACCT, H, STRAT)"
                     value={commandInput} onChange={e => setCommandInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && executeCommand()}
                   />
               </div>
               <div className="mt-2 text-[10px] text-gray-500 flex gap-4 uppercase">
-                  <span><strong className="text-gray-300">TICKET</strong> TRADE</span>
-                  <span><strong className="text-gray-300">BLOTTER</strong> ORDERS</span>
-                  <span><strong className="text-gray-300">OMS</strong> BOTH</span>
+                  <span><strong className="text-gray-300">CORE</strong> INFRA</span>
+                  <span><strong className="text-gray-300">ACCT</strong> ACCOUNTS</span>
+                  <span><strong className="text-gray-300">H</strong> HELP</span>
+                  <span><strong className="text-gray-300">STRAT</strong> HEALTH</span>
               </div>
           </div>
       )}
@@ -426,6 +400,7 @@ const CryptoDashboard: React.FC = () => {
         </div>
         <div className="flex items-center gap-4">
             <span className="text-gray-600">SAVE: <span className="text-white">CTRL+S</span></span>
+            <span className="text-cyan-600">INFRA: <span className="text-green-500 font-bold">ONLINE</span></span>
             <span>{dockedWindows.length} TABS &bull; {floatingWindows.length} FLOAT</span>
         </div>
       </div>

@@ -1,4 +1,3 @@
-
 import { useEffect, useState, useRef, useMemo } from 'react';
 import paperExecutionService from '../services/paperExecutionService';
 import BinanceService from '../services/binanceService';
@@ -6,7 +5,6 @@ import { Position, LivePosition, PortfolioGroup, RiskMetrics, CarryMetric } from
 
 export const usePortfolioData = () => {
     const [groups, setGroups] = useState<PortfolioGroup[]>([]);
-    const [allPositions, setAllPositions] = useState<LivePosition[]>([]);
     const [metrics, setMetrics] = useState<RiskMetrics | null>(null);
     const [carry, setCarry] = useState<CarryMetric[]>([]);
     const [loading, setLoading] = useState(true);
@@ -57,7 +55,6 @@ export const usePortfolioData = () => {
         // 5. Calculation Loop (250ms)
         const interval = setInterval(() => {
             const market = marketRef.current;
-            const computedPositions: LivePosition[] = [];
             
             // --- CALC POSITIONS & GROUPS ---
             const grouped: Record<string, LivePosition[]> = {};
@@ -92,13 +89,12 @@ export const usePortfolioData = () => {
                     unrealizedPnl,
                     pnlPercent
                 };
-                computedPositions.push(livePos);
 
                 if (!grouped[pos.baseAsset]) grouped[pos.baseAsset] = [];
                 grouped[pos.baseAsset].push(livePos);
             });
 
-            // Aggregate Groups (Default by Asset for backward compatibility/quick access)
+            // Aggregate Groups
             const finalGroups: PortfolioGroup[] = Object.keys(grouped).map(base => {
                 const positions = grouped[base];
                 const netDeltaBase = positions.reduce((acc, p) => acc + (p.side === 'LONG' ? p.quantity : -p.quantity), 0);
@@ -116,9 +112,10 @@ export const usePortfolioData = () => {
             });
 
             // --- CALC RISK METRICS ---
-            const totalPnl = computedPositions.reduce((acc, p) => acc + p.unrealizedPnl, 0);
-            const longExposure = computedPositions.filter(p => p.side === 'LONG').reduce((acc, p) => acc + p.notionalUsd, 0);
-            const shortExposure = computedPositions.filter(p => p.side === 'SHORT').reduce((acc, p) => acc + p.notionalUsd, 0);
+            const flat = finalGroups.flatMap(g => g.positions);
+            const totalPnl = flat.reduce((acc, p) => acc + p.unrealizedPnl, 0);
+            const longExposure = flat.filter(p => p.side === 'LONG').reduce((acc, p) => acc + p.notionalUsd, 0);
+            const shortExposure = flat.filter(p => p.side === 'SHORT').reduce((acc, p) => acc + p.notionalUsd, 0);
             const netDeltaUsd = longExposure - shortExposure; // Simple net
             
             // Mock Equity for leverage calc (Base 1M + PnL)
@@ -126,7 +123,6 @@ export const usePortfolioData = () => {
             const totalEquity = BASE_CAPITAL + totalPnl;
             const leverage = (longExposure + shortExposure) / totalEquity;
 
-            setAllPositions(computedPositions);
             setGroups(finalGroups);
             setMetrics({
                 totalEquity,
@@ -177,5 +173,5 @@ export const usePortfolioData = () => {
 
     }, []);
 
-    return { groups, allPositions, metrics, carry, loading };
+    return { groups, metrics, carry, loading };
 };

@@ -1,12 +1,11 @@
 
-import { WebSocketMessage, SpotTicker, FuturesMark, OrderBook, OrderBookLevel, Trade, Kline, FuturesSymbolInfo } from '../types';
+import { WebSocketMessage, SpotTicker, FuturesMark, OrderBook, Trade, Kline, FuturesSymbolInfo } from '../types';
 
 type SpotCallback = (data: SpotTicker) => void;
 type FuturesCallback = (data: FuturesMark) => void;
 type DepthCallback = (data: { type: 'SPOT' | 'FUTURES', bids: [string, string][], asks: [string, string][] }) => void;
 type TradeCallback = (data: Trade) => void;
 type MultiTickerCallback = (data: { symbol: string, price: number }) => void;
-type KlineCallback = (data: Kline) => void;
 
 class BinanceService {
   private spotWs: WebSocket | null = null;
@@ -155,12 +154,17 @@ class BinanceService {
       
       // Handle Trade
       if (msg.e === 'aggTrade') {
+        // Fix: Added missing venueTime property for Trade interface
         const trade: Trade = {
           id: msg.a,
+          symbol: msg.s || symbol,
+          venue: 'BINANCE_USDT_M',
           price: parseFloat(msg.p),
           qty: parseFloat(msg.q),
           time: msg.T,
-          isBuyerMaker: msg.m
+          venueTime: msg.T,
+          isBuyerMaker: msg.m,
+          type: 'TRADE'
         };
         onFuturesTrade(trade);
         return;
@@ -185,38 +189,6 @@ class BinanceService {
       this.focusWs.close();
       this.focusWs = null;
     }
-  }
-
-  // --- Kline Streaming (Charts) ---
-
-  public subscribeKline(symbol: string, type: 'SPOT' | 'FUTURES', interval: string, callback: KlineCallback) {
-    const streamName = `${symbol.toLowerCase()}@kline_${interval}`;
-    const baseUrl = type === 'SPOT' 
-        ? 'wss://stream.binance.com:9443/ws/'
-        : 'wss://fstream.binance.com/ws/';
-
-    const ws = new WebSocket(`${baseUrl}${streamName}`);
-    ws.onmessage = (e) => {
-        try {
-            const msg = JSON.parse(e.data);
-            if (msg.e === 'kline') {
-                const k = msg.k;
-                callback({
-                    openTime: k.t,
-                    open: parseFloat(k.o),
-                    high: parseFloat(k.h),
-                    low: parseFloat(k.l),
-                    close: parseFloat(k.c),
-                    volume: parseFloat(k.v),
-                    closeTime: k.T
-                });
-            }
-        } catch (err) {
-            console.error('Kline parse error', err);
-        }
-    };
-    
-    return () => ws.close();
   }
 
   // --- Futures Curve Logic ---
@@ -320,7 +292,7 @@ class BinanceService {
 
   public subscribeCurveTickers(symbols: string[], callback: MultiTickerCallback) {
     if (this.curveWs) this.curveWs.close();
-    
+
     const streams = symbols.map(s => `${s.toLowerCase()}@bookTicker`).join('/');
     const url = `wss://fstream.binance.com/ws/${streams}`;
 

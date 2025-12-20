@@ -1,5 +1,5 @@
 
-import { RiskLimit, RiskOverrideLog, LivePosition } from '../types';
+import { RiskLimit, RiskOverrideLog } from '../types';
 
 class RiskConfigService {
   private limits: RiskLimit[] = [
@@ -49,48 +49,6 @@ class RiskConfigService {
 
   public isStrategyBlocked(strategyId: string, symbol: string): boolean {
     return this.blocks.includes(`${strategyId}:${symbol}`);
-  }
-
-  // Pre-Trade Risk Check for OMS
-  // Returns success: true if pass, or failure details
-  public checkPreTrade(
-      strategyId: string, 
-      traderId: string, 
-      symbol: string, 
-      venue: string, 
-      additionalNotionalUsd: number, 
-      currentPositions: LivePosition[]
-  ): { passed: boolean, warning?: string, hardBlock?: boolean, details?: string } {
-      
-      // 1. Block Check
-      if (this.isStrategyBlocked(strategyId, symbol)) {
-          return { passed: false, hardBlock: true, details: `Strategy ${strategyId} is BLOCKED on ${symbol}` };
-      }
-
-      // 2. Notional Limit Checks
-      // Strategy Limit
-      const stratLimit = this.limits.find(l => l.type === 'STRATEGY' && l.entityId === strategyId);
-      const stratCurrent = currentPositions.filter(p => p.strategyId === strategyId).reduce((s, p) => s + p.notionalUsd, 0);
-      if (stratLimit && (stratCurrent + additionalNotionalUsd > stratLimit.limitNotionalUsd)) {
-          return { 
-              passed: !stratLimit.isHardBlock, 
-              hardBlock: stratLimit.isHardBlock, 
-              details: `Breach: Strategy ${strategyId} Limit ($${(stratLimit.limitNotionalUsd/1000).toFixed(0)}k)` 
-          };
-      }
-
-      // Symbol Limit
-      const symLimit = this.limits.find(l => l.type === 'SYMBOL' && l.entityId === symbol);
-      const symCurrent = currentPositions.filter(p => p.symbol === symbol).reduce((s, p) => s + p.notionalUsd, 0);
-      if (symLimit && (symCurrent + additionalNotionalUsd > symLimit.limitNotionalUsd)) {
-          return {
-              passed: !symLimit.isHardBlock,
-              hardBlock: symLimit.isHardBlock,
-              details: `Breach: Symbol ${symbol} Limit ($${(symLimit.limitNotionalUsd/1000).toFixed(0)}k)`
-          };
-      }
-
-      return { passed: true };
   }
 }
 

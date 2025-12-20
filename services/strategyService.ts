@@ -1,5 +1,6 @@
 
 import { StrategyInstance, StrategyLog, StrategyState } from '../types';
+import auditLogService from './auditLogService';
 
 class StrategyService {
   private instances: StrategyInstance[] = [
@@ -44,27 +45,6 @@ class StrategyService {
       sharpeRatio: 1.8,
       profitFactor: 1.4,
       riskFlags: ['HIGH_REJECT_RATE']
-    },
-    {
-      id: 'ETH_FUTURES_HEDGE',
-      name: 'ETH Dated Hedge',
-      family: 'HEDGE',
-      desk: 'MAIN_DESK',
-      owner: 'ALICE',
-      venues: ['BINANCE_FUTURE'],
-      instruments: ['ETHUSDT_250328'],
-      state: 'RUNNING',
-      rejectRate: 0.0,
-      avgSlippageBps: 0.1,
-      medianTimeToFillMs: 200,
-      lastTickAgeMs: 1200, // Stale?
-      pnlDay: 450,
-      pnlMtd: -1200,
-      hitRate: 100,
-      avgTradeSizeUsd: 50000,
-      sharpeRatio: 0.5,
-      profitFactor: 1.1,
-      riskFlags: ['STALE_DATA_FEED']
     }
   ];
 
@@ -81,31 +61,40 @@ class StrategyService {
   public updateState(strategyId: string, newState: StrategyState, user: string, reason: string) {
     const strat = this.instances.find(s => s.id === strategyId);
     if (strat) {
+      const oldState = strat.state;
+      strat.state = newState;
+      
       const log: StrategyLog = {
         timestamp: Date.now(),
         strategyId,
         user,
-        action: `STATE_CHANGE: ${newState}`,
-        oldState: strat.state,
+        action: `STATE_TRANSITION`,
+        oldState,
         newState,
         reason
       };
-      strat.state = newState;
       this.logs.push(log);
-      console.log(`[STRAT] ${strategyId} transitioned to ${newState} by ${user}. Reason: ${reason}`);
+      auditLogService.log('STRATEGY_ENGINE', 'COMMAND', `Strategy ${strategyId} moved ${oldState} -> ${newState}: ${reason}`, user);
     }
   }
 
-  public updateRiskTarget(strategyId: string, param: string, value: string, user: string, reason: string) {
-      const log: StrategyLog = {
-        timestamp: Date.now(),
-        strategyId,
-        user,
-        action: `PARAM_CHANGE: ${param}=${value}`,
-        reason
-      };
-      this.logs.push(log);
-      console.log(`[STRAT] ${strategyId} param ${param} updated to ${value} by ${user}`);
+  public kill(strategyId: string, user: string, reason: string) {
+    this.updateState(strategyId, 'ERROR', user, `EMERGENCY_KILL: ${reason}`);
+  }
+
+  public softKill(strategyId: string, user: string, reason: string) {
+    this.updateState(strategyId, 'DRAINING', user, `SOFT_KILL: ${reason}`);
+  }
+
+  public halt(strategyId: string, user: string, reason: string) {
+    this.updateState(strategyId, 'PAUSED', user, `HALT: ${reason}`);
+  }
+
+  public updateParams(strategyId: string, params: Record<string, any>, user: string) {
+      const strat = this.instances.find(s => s.id === strategyId);
+      if (strat) {
+          auditLogService.log('STRATEGY_ENGINE', 'COMMAND', `Parameters updated for ${strategyId}`, user, params);
+      }
   }
 }
 

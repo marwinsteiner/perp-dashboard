@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { usePortfolioData } from '../hooks/usePortfolioData';
-import { LivePosition, PortfolioGroup } from '../types';
+import { LivePosition } from '../types';
 
 const formatUSD = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const formatQty = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
@@ -10,128 +10,65 @@ const formatPnl = (n: number) => {
     return n >= 0 ? `+${s}` : s;
 };
 
-type GroupMode = 'ASSET' | 'STRATEGY' | 'TRADER' | 'VENUE';
+type GroupByMode = 'ASSET' | 'STRATEGY' | 'TRADER' | 'VENUE';
 
-interface DisplayGroup {
-    key: string;
-    label: string;
-    positions: LivePosition[];
-    netDeltaBase: number;
-    netDeltaUsd: number;
-    totalPnl: number;
-    totalGrossUsd: number;
+interface GroupedData {
+  label: string;
+  positions: LivePosition[];
+  netDeltaUsd: number;
+  netDeltaBase?: number; // Only makes sense for ASSET mode
+  totalPnl: number;
 }
 
-interface PortfolioWidgetProps {
-    onOpenOMS?: (context: any) => void;
-}
+const PortfolioWidget: React.FC = () => {
+  const { groups: assetGroups, metrics, carry, loading } = usePortfolioData();
+  const [groupBy, setGroupBy] = useState<GroupByMode>('ASSET');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({ 'BTC': true, 'ETH': true });
 
-const PortfolioWidget: React.FC<PortfolioWidgetProps> = ({ onOpenOMS }) => {
-  const { allPositions, metrics, carry, loading } = usePortfolioData();
-  const [groupMode, setGroupMode] = useState<GroupMode>('ASSET');
-  const [expandedKeys, setExpandedKeys] = useState<Record<string, boolean>>({});
-
-  // Context Menu State
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, pos: LivePosition } | null>(null);
-
-  const toggleGroup = (key: string) => {
-      setExpandedKeys(prev => ({ ...prev, [key]: !prev[key] }));
+  const toggleGroup = (label: string) => {
+      setExpandedGroups(prev => ({ ...prev, [label]: !prev[label] }));
   };
 
-  const handleRightClick = (e: React.MouseEvent, pos: LivePosition) => {
-      e.preventDefault();
-      setContextMenu({ x: e.clientX, y: e.clientY, pos });
-  };
+  // Flatten and Re-group based on UI selection
+  const processedGroups = useMemo(() => {
+    const allPositions = assetGroups.flatMap(g => g.positions);
+    const map: Record<string, LivePosition[]> = {};
 
-  const closeMenu = () => setContextMenu(null);
+    allPositions.forEach(pos => {
+      let key = '';
+      switch (groupBy) {
+        case 'ASSET': key = pos.baseAsset; break;
+        case 'STRATEGY': key = pos.strategyId || 'UNASSIGNED'; break;
+        case 'TRADER': key = pos.traderId || 'HOUSE'; break;
+        case 'VENUE': key = pos.venue; break;
+      }
+      if (!map[key]) map[key] = [];
+      map[key].push(pos);
+    });
 
-  const triggerOMS = (action: 'TRADE' | 'FLATTEN' | 'HALVE') => {
-      if (!contextMenu || !onOpenOMS) return;
-      const { pos } = contextMenu;
+    return Object.entries(map).map(([key, positions]) => {
+      const netDeltaUsd = positions.reduce((acc, p) => acc + (p.side === 'LONG' ? p.notionalUsd : -p.notionalUsd), 0);
+      const totalPnl = positions.reduce((acc, p) => acc + p.unrealizedPnl, 0);
       
-      let side = 'BUY'; 
-      // Default Trade action: no side pref, or maybe contra logic? Default BUY
-      // Flatten: Opposite of current side
-      if (action === 'FLATTEN' || action === 'HALVE') {
-          side = pos.side === 'LONG' ? 'SELL' : 'BUY';
+      let netDeltaBase: number | undefined;
+      if (groupBy === 'ASSET') {
+        netDeltaBase = positions.reduce((acc, p) => acc + (p.side === 'LONG' ? p.quantity : -p.quantity), 0);
       }
 
-      onOpenOMS({
-          symbol: pos.symbol,
-          venue: pos.venue,
-          strategyId: pos.strategyId,
-          traderId: pos.traderId,
-          side: side,
-          // Could pass quantity intent here if OMS supported it, OMS widget will handle logic if needed
-      });
-      closeMenu();
-  };
+      return {
+        label: key,
+        positions,
+        netDeltaUsd,
+        netDeltaBase,
+        totalPnl
+      };
+    }).sort((a, b) => b.label.localeCompare(a.label));
+  }, [assetGroups, groupBy]);
 
-  // Generic Grouping Logic
-  const displayGroups: DisplayGroup[] = useMemo(() => {
-      if (!allPositions.length) return [];
-
-      const groups: Record<string, LivePosition[]> = {};
-      const labels: Record<string, string> = {};
-      
-      allPositions.forEach(p => {
-          let key = '';
-          let label = '';
-          
-          if (groupMode === 'ASSET') {
-              key = p.baseAsset;
-              label = p.baseAsset;
-          } else if (groupMode === 'STRATEGY') {
-              key = p.strategyId || 'UNASSIGNED';
-              label = key.replace(/_/g, ' ');
-          } else if (groupMode === 'TRADER') {
-              key = p.traderId || 'HOUSE';
-              label = key;
-          } else if (groupMode === 'VENUE') {
-              key = p.venue;
-              label = key.replace(/_/g, ' ');
-          }
-
-          if (!groups[key]) {
-            groups[key] = [];
-            labels[key] = label;
-          }
-          groups[key].push(p);
-      });
-
-      return Object.entries(groups).map(([key, positions]) => {
-          const netDeltaBase = positions.reduce((acc, p) => acc + (p.side === 'LONG' ? p.quantity : -p.quantity), 0);
-          const netDeltaUsd = positions.reduce((acc, p) => acc + (p.side === 'LONG' ? p.notionalUsd : -p.notionalUsd), 0);
-          const totalPnl = positions.reduce((acc, p) => acc + p.unrealizedPnl, 0);
-          const totalGrossUsd = positions.reduce((acc, p) => acc + p.notionalUsd, 0);
-          const label = labels[key];
-
-          return {
-              key,
-              label: groupMode === 'ASSET' ? `${label} NET` : label,
-              positions,
-              netDeltaBase,
-              netDeltaUsd,
-              totalPnl,
-              totalGrossUsd
-          };
-      }).sort((a,b) => b.totalGrossUsd - a.totalGrossUsd); // Sort by Size
-
-  }, [allPositions, groupMode]);
-
-  // Set initial expansion for Asset mode
-  useMemo(() => {
-      if (groupMode === 'ASSET') {
-        const initial: Record<string, boolean> = {};
-        displayGroups.forEach(g => initial[g.key] = true);
-        if (Object.keys(expandedKeys).length === 0) setExpandedKeys(initial);
-      }
-  }, [groupMode]);
-
-  if (loading) return <div className="h-full flex items-center justify-center text-cyan-500 font-mono animate-pulse">CONNECTING TO PAPER ENGINE...</div>;
+  if (loading) return <div className="h-full flex items-center justify-center text-cyan-500 font-mono animate-pulse uppercase">Connecting to Portfolio Engine...</div>;
 
   return (
-    <div className="h-full flex flex-col bg-black font-mono text-xs overflow-hidden" onClick={closeMenu}>
+    <div className="h-full flex flex-col bg-black font-mono text-xs overflow-hidden">
         
         {/* TOP RISK STRIP */}
         <div className="flex items-center justify-between bg-neutral-900 border-b border-gray-800 p-2 shrink-0">
@@ -172,35 +109,36 @@ const PortfolioWidget: React.FC<PortfolioWidgetProps> = ({ onOpenOMS }) => {
             </div>
         </div>
 
-        {/* HEADER & FILTER BAR */}
-        <div className="bg-neutral-900/50 border-b border-gray-800 p-1 px-2 flex items-center gap-2">
-            <span className="text-gray-500 text-[10px] uppercase font-bold mr-2">Group By:</span>
-            {(['ASSET', 'STRATEGY', 'TRADER', 'VENUE'] as GroupMode[]).map(mode => (
-                <button
-                    key={mode}
-                    onClick={() => setGroupMode(mode)}
-                    className={`
-                        px-2 py-0.5 text-[9px] font-bold uppercase border rounded-sm transition-all
-                        ${groupMode === mode 
-                            ? 'bg-cyan-900 border-cyan-500 text-cyan-100' 
-                            : 'bg-black border-gray-700 text-gray-500 hover:text-white hover:border-gray-500'}
-                    `}
-                >
-                    {mode}
-                </button>
-            ))}
+        {/* GROUP BY CONTROLS */}
+        <div className="bg-neutral-900/50 border-b border-gray-800 p-2 flex items-center gap-3 shrink-0">
+            <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Group By:</span>
+            <div className="flex gap-2">
+                {(['ASSET', 'STRATEGY', 'TRADER', 'VENUE'] as GroupByMode[]).map(mode => (
+                    <button
+                        key={mode}
+                        onClick={() => { setGroupBy(mode); setExpandedGroups({}); }}
+                        className={`px-3 py-1 text-[10px] font-bold border transition-all rounded-sm uppercase ${
+                            groupBy === mode 
+                                ? 'bg-cyan-900/50 border-cyan-600 text-cyan-400' 
+                                : 'bg-black/40 border-gray-800 text-gray-600 hover:text-gray-400 hover:border-gray-700'
+                        }`}
+                    >
+                        {mode}
+                    </button>
+                ))}
+            </div>
         </div>
 
         {/* MAIN SPLIT */}
         <div className="flex-1 flex min-h-0">
             
             {/* LEFT: MASTER GRID */}
-            <div className="flex-1 overflow-auto border-r border-gray-800 relative">
+            <div className="flex-1 overflow-auto border-r border-gray-800">
                 <table className="w-full text-left border-collapse">
-                    <thead className="bg-neutral-900 sticky top-0 z-10 text-[10px] uppercase text-gray-500 shadow-sm">
+                    <thead className="bg-neutral-900 sticky top-0 z-10 text-[10px] uppercase text-gray-500">
                         <tr>
                             <th className="px-2 py-1 border-r border-gray-800 w-8"></th>
-                            <th className="px-2 py-1 border-r border-gray-800 w-32">Group / Inst</th>
+                            <th className="px-2 py-1 border-r border-gray-800">Group / Inst</th>
                             <th className="px-2 py-1 border-r border-gray-800 text-right">Qty</th>
                             <th className="px-2 py-1 border-r border-gray-800 text-right">Value ($)</th>
                             <th className="px-2 py-1 border-r border-gray-800 text-right">Entry</th>
@@ -210,24 +148,22 @@ const PortfolioWidget: React.FC<PortfolioWidgetProps> = ({ onOpenOMS }) => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-900/50">
-                        {displayGroups.map(group => {
-                            const isExpanded = expandedKeys[group.key];
+                        {processedGroups.map(group => {
+                            const isExpanded = expandedGroups[group.label];
                             return (
-                                <React.Fragment key={group.key}>
+                                <React.Fragment key={group.label}>
                                     {/* GROUP HEADER */}
                                     <tr 
-                                        onClick={() => toggleGroup(group.key)}
-                                        className="bg-gray-900 hover:bg-gray-800 cursor-pointer text-gray-300 font-bold border-b border-gray-800"
+                                        onClick={() => toggleGroup(group.label)}
+                                        className="bg-gray-900 hover:bg-gray-800 cursor-pointer text-gray-300 font-bold"
                                     >
                                         <td className="px-2 py-1 text-center text-[10px]">{isExpanded ? '▼' : '▶'}</td>
-                                        <td className="px-2 py-1 text-cyan-400 font-mono truncate">{group.label}</td>
-                                        
-                                        {/* Dynamic Columns based on Group Mode logic */}
-                                        <td className={`px-2 py-1 text-right ${group.netDeltaBase > 0 ? 'text-blue-400' : group.netDeltaBase < 0 ? 'text-orange-400' : 'text-gray-500'}`}>
-                                            {groupMode === 'ASSET' ? formatQty(group.netDeltaBase) : '---'}
+                                        <td className="px-2 py-1 text-cyan-400 uppercase">{group.label} {groupBy === 'ASSET' ? 'NET' : ''}</td>
+                                        <td className={`px-2 py-1 text-right ${group.netDeltaUsd > 0 ? 'text-blue-400' : 'text-orange-400'}`}>
+                                            {group.netDeltaBase !== undefined ? formatQty(group.netDeltaBase) : ''}
                                         </td>
-                                        <td className="px-2 py-1 text-right text-gray-300">
-                                            {formatUSD(group.totalGrossUsd)}
+                                        <td className="px-2 py-1 text-right text-gray-400">
+                                            {formatUSD(group.positions.reduce((a,b) => a + b.notionalUsd, 0))}
                                         </td>
                                         <td className="px-2 py-1 text-right text-gray-500 italic">---</td>
                                         <td className="px-2 py-1 text-right text-gray-500 italic">---</td>
@@ -239,18 +175,13 @@ const PortfolioWidget: React.FC<PortfolioWidgetProps> = ({ onOpenOMS }) => {
 
                                     {/* POSITIONS */}
                                     {isExpanded && group.positions.map(pos => (
-                                        <tr 
-                                            key={pos.id} 
-                                            className="hover:bg-gray-900/30 text-gray-400 text-[11px] cursor-context-menu"
-                                            onContextMenu={(e) => handleRightClick(e, pos)}
-                                        >
+                                        <tr key={pos.id} className="hover:bg-gray-900/30 text-gray-400">
                                             <td className="px-2 py-1 border-r border-gray-800"></td>
                                             <td className="px-2 py-1 border-r border-gray-800 flex items-center gap-2">
-                                                <span className={`w-1 h-3 shrink-0 ${pos.side === 'LONG' ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                                <div className="flex flex-col leading-none">
-                                                    <span className="text-white font-bold">{pos.symbol.replace('USDT','')}</span>
-                                                    <span className="text-[9px] text-gray-600">{pos.venue.replace('_USDT','')}</span>
-                                                </div>
+                                                <span className={`w-1 h-3 ${pos.side === 'LONG' ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                                <span className={pos.venue === 'SPOT' ? 'text-white' : 'text-yellow-500'}>
+                                                    {pos.symbol.replace('USDT','')} [{pos.venue.split('_')[0]}]
+                                                </span>
                                             </td>
                                             <td className="px-2 py-1 border-r border-gray-800 text-right font-mono">
                                                 {formatQty(pos.quantity)}
@@ -277,50 +208,18 @@ const PortfolioWidget: React.FC<PortfolioWidgetProps> = ({ onOpenOMS }) => {
                         })}
                     </tbody>
                 </table>
-
-                {/* CONTEXT MENU */}
-                {contextMenu && (
-                    <div 
-                        className="fixed z-50 bg-black border border-gray-700 shadow-xl py-1 rounded w-40 text-xs text-gray-300 animate-in fade-in duration-100"
-                        style={{ top: contextMenu.y, left: contextMenu.x }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="px-3 py-1.5 border-b border-gray-800 font-bold text-white bg-gray-900/50">
-                            {contextMenu.pos.symbol}
-                        </div>
-                        <button 
-                            onClick={() => triggerOMS('TRADE')}
-                            className="w-full text-left px-3 py-1.5 hover:bg-cyan-900/30 hover:text-cyan-400"
-                        >
-                            Trade...
-                        </button>
-                        <div className="my-1 border-t border-gray-800"></div>
-                        <button 
-                            onClick={() => triggerOMS('HALVE')}
-                            className="w-full text-left px-3 py-1.5 hover:bg-gray-800"
-                        >
-                            Halve Position
-                        </button>
-                        <button 
-                            onClick={() => triggerOMS('FLATTEN')}
-                            className="w-full text-left px-3 py-1.5 hover:bg-red-900/30 hover:text-red-400"
-                        >
-                            Flatten
-                        </button>
-                    </div>
-                )}
             </div>
 
             {/* RIGHT: RISK & BASIS PANEL */}
-            <div className="w-80 flex flex-col bg-gray-900/20 border-l border-gray-800">
-                {/* Tenor Risk (Global) */}
+            <div className="w-80 flex flex-col bg-gray-900/20">
+                {/* Tenor Buckets */}
                 <div className="p-2 border-b border-gray-800">
                     <h3 className="text-cyan-500 font-bold mb-2 uppercase text-[10px] tracking-wider">Global Tenor Risk</h3>
                     <div className="space-y-2">
-                        <RiskBucketRow label="SPOT / CASH" delta={allPositions.filter(p=>p.venue==='SPOT').reduce((x,y)=>x+y.notionalUsd,0)} />
-                        <RiskBucketRow label="PERP (0d)" delta={allPositions.filter(p=>p.venue.includes('PERP')).reduce((x,y)=>x + (y.side==='SHORT'? -y.notionalUsd : y.notionalUsd), 0)} />
+                        <RiskBucketRow label="SPOT / CASH" delta={assetGroups.reduce((a,g) => a + g.positions.filter(p=>p.venue==='SPOT').reduce((x,y)=>x+y.notionalUsd,0), 0)} />
+                        <RiskBucketRow label="PERP (0d)" delta={assetGroups.reduce((a,g) => a - g.positions.filter(p=>p.venue.includes('PERP')).reduce((x,y)=>x+y.notionalUsd,0), 0)} />
                         <RiskBucketRow label="FUTURES (<30d)" delta={0} /> 
-                        <RiskBucketRow label="FUTURES (>30d)" delta={allPositions.filter(p=>p.venue.includes('FUTURE')).reduce((x,y)=>x + (y.side==='SHORT'? -y.notionalUsd : y.notionalUsd), 0)} />
+                        <RiskBucketRow label="FUTURES (>30d)" delta={assetGroups.reduce((a,g) => a - g.positions.filter(p=>p.venue.includes('FUTURE')).reduce((x,y)=>x+y.notionalUsd,0), 0)} />
                     </div>
                 </div>
 

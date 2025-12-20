@@ -1,8 +1,176 @@
 
-export interface MarketSymbol {
+export type Venue = 'BINANCE_SPOT' | 'BINANCE_USDT_M' | 'BINANCE_COIN_M' | 'SPOT' | 'PERP_USDT' | 'FUTURE_USDT' | 'BINANCE_PERP' | 'BINANCE_FUTURE' | 'SIM_EXCHANGE';
+export type Side = 'LONG' | 'SHORT' | 'FLAT';
+export type MarginType = 'CROSS' | 'ISOLATED';
+
+// --- Normalized Market Data Models ---
+
+export interface NormalizedEvent {
+  id: string | number;
+  venue: Venue | string;
   symbol: string;
-  base: string;
-  quote: string;
+  venueTime: number;
+  receivedTime?: number;
+}
+
+export interface Trade extends NormalizedEvent {
+  type: 'TRADE';
+  price: number;
+  qty: number;
+  time: number;
+  isBuyerMaker: boolean;
+}
+
+export interface Bar extends NormalizedEvent {
+  type: 'BAR';
+  interval: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface FundingEvent extends NormalizedEvent {
+  type: 'FUNDING';
+  rate: number;
+  nextFundingTime: number;
+}
+
+// --- Unified Strategy Interface ---
+
+export interface Strategy {
+  id: string;
+  config: Record<string, any>;
+  onBar: (bar: Bar) => void;
+  onTrade: (trade: Trade) => void;
+  onFunding: (event: FundingEvent) => void;
+  init: (ctx: BacktestContext) => void;
+}
+
+export interface BacktestContext {
+  initialCapital: number;
+  placeOrder: (order: Partial<Order>) => void;
+  getEquity: () => number;
+  getPosition: (symbol: string) => number;
+}
+
+export interface Order {
+  id: string;
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  qty: number;
+  price?: number;
+  type: 'MARKET' | 'LIMIT';
+  status: 'NEW' | 'FILLED' | 'CANCELLED';
+}
+
+// --- Backtesting & Research Types ---
+
+export interface BacktestConfig {
+  id: string;
+  strategyId: string;
+  symbols: string[];
+  startTime: number;
+  endTime: number;
+  initialCapital: number;
+  slippageBps: number;
+  latencyMs: number;
+  parameters: Record<string, any>;
+}
+
+export interface PerformanceMetrics {
+  sharpeRatio: number;
+  maxDrawdown: number;
+  totalReturnPct: number;
+  winRate: number;
+  profitFactor: number;
+  totalTrades: number;
+  annualizedReturn: number;
+  volatility: number;
+}
+
+export interface BacktestResult {
+  config: BacktestConfig;
+  metrics: PerformanceMetrics;
+  equityCurve: { timestamp: number; equity: number }[];
+  pnlLog: { timestamp: number; pnl: number; reason: string }[];
+  executionLog: Trade[];
+}
+
+// --- Strategy & Account Models ---
+
+export interface StrategyInstance { 
+  id: string; 
+  name: string; 
+  family: string; 
+  desk: string; 
+  owner: string; 
+  venues: string[]; 
+  instruments: string[]; 
+  state: StrategyState; 
+  rejectRate: number; 
+  avgSlippageBps: number; 
+  medianTimeToFillMs: number; 
+  lastTickAgeMs: number; 
+  pnlDay: number; 
+  pnlMtd: number; 
+  hitRate: number; 
+  avgTradeSizeUsd: number; 
+  sharpeRatio: number; 
+  profitFactor: number; 
+  riskFlags: string[]; 
+  grossNotionalUsd?: number; 
+  netNotionalUsd?: number; 
+}
+
+export type StrategyState = 'RUNNING' | 'PAUSED' | 'DRAINING' | 'ERROR' | 'BACKTESTING';
+
+export interface AuditEntry {
+  timestamp: number;
+  source: string;
+  user?: string;
+  type: 'COMMAND' | 'TRADE' | 'RISK' | 'SYSTEM' | 'UI' | 'RESEARCH';
+  message: string;
+  payload?: any;
+}
+
+export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE' | 'MARS' | 'STRAT' | 'HELP' | 'CORE' | 'ACCT';
+
+export interface WindowState {
+  id: string;
+  type: ViewType;
+  title: string;
+  symbol?: string;
+  isFloating: boolean;
+  isMinimized: boolean;
+  zIndex: number;
+  x: number; y: number; w: number; h: number;
+}
+
+export interface ScreenConfig {
+  name: string;
+  timestamp: number;
+  windows: WindowState[];
+  activeTabId: string;
+}
+
+export interface Kline { openTime: number; open: number; high: number; low: number; close: number; volume: number; closeTime: number; }
+
+// --- Support Types ---
+
+export interface WebSocketMessage {
+  s?: string;
+  b?: string;
+  B?: string;
+  a?: string;
+  A?: string;
+  e?: string;
+  p?: string;
+  r?: string;
+  T?: number;
+  bids?: [string, string][];
+  asks?: [string, string][];
 }
 
 export interface SpotTicker {
@@ -20,35 +188,10 @@ export interface FuturesMark {
   nextFundingTime: number;
 }
 
-export interface CombinedMarketData {
-  symbol: string;
-  spot?: SpotTicker;
-  futures?: FuturesMark;
-}
-
-export interface WebSocketMessage {
-  e?: string; // event type
-  s?: string; // symbol
-  b?: string; // bid price
-  B?: string; // bid qty
-  a?: string; // ask price
-  A?: string; // ask qty
-  p?: string; // mark price
-  r?: string; // funding rate
-  T?: number; // next funding time
-  // Depth
-  bids?: [string, string][];
-  asks?: [string, string][];
-  // Trade
-  m?: boolean; // is buyer maker
-  q?: string; // quantity
-  T_trade?: number; // trade time
-}
-
 export interface OrderBookLevel {
   price: number;
   size: number;
-  total: number; // cumulative size
+  total: number;
 }
 
 export interface OrderBook {
@@ -56,22 +199,20 @@ export interface OrderBook {
   asks: OrderBookLevel[];
 }
 
-export interface Trade {
-  id: number;
-  price: number;
-  qty: number;
-  time: number;
-  isBuyerMaker: boolean; // true = Sell (aggressor sold into bid), false = Buy (aggressor bought ask)
+export interface FuturesSymbolInfo {
+  symbol: string;
+  pair: string;
+  contractType: string;
+  deliveryDate: number;
+  onboardDate: number;
+  baseAsset: string;
+  quoteAsset: string;
 }
 
-export interface Kline {
-  openTime: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  closeTime: number;
+export interface CombinedMarketData {
+  symbol: string;
+  spot?: SpotTicker;
+  futures?: FuturesMark;
 }
 
 export interface FocusMetrics {
@@ -83,67 +224,25 @@ export interface FocusMetrics {
   basisChange5m: number;
 }
 
-// --- Futures Curve Types ---
-
-export interface FuturesSymbolInfo {
-  symbol: string;
-  pair: string;
-  contractType: 'PERPETUAL' | 'CURRENT_QUARTER' | 'NEXT_QUARTER' | 'CURRENT_MONTH' | 'NEXT_MONTH'; // Simplified
-  deliveryDate: number;
-  onboardDate: number;
-  baseAsset: string;
-  quoteAsset: string;
-}
-
 export interface CurvePoint {
   symbol: string;
   type: 'SPOT' | 'PERP' | 'FUTURE';
-  marginType: 'USDT' | 'COIN' | 'SPOT';
+  marginType: 'SPOT' | 'USDT' | 'COIN';
   price: number;
-  expiryDate?: number; // Timestamp
   daysToExpiry: number;
-  basis: number; // Raw diff
-  basisPercent: number; // (F-S)/S
-  annualizedBasis: number; // APR %
+  basis: number;
+  basisPercent: number;
+  annualizedBasis: number;
+  expiryDate?: number;
 }
-
-// --- Window Management Types ---
-
-export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE' | 'MARS' | 'STRAT' | 'HELP' | 'SHOCK' | 'FLOW' | 'OMS' | 'TICKET' | 'BLOTTER';
-
-export interface WindowState {
-  id: string;
-  type: ViewType;
-  title: string;
-  symbol?: string; // Context for the view (e.g. BTCUSDT)
-  isFloating: boolean;
-  isMinimized: boolean;
-  zIndex: number;
-  // Position & Size for floating
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  // OMS Specific Context
-  contextData?: any; 
-}
-
-export interface ScreenConfig {
-  name: string;
-  timestamp: number;
-  windows: WindowState[];
-  activeTabId: string;
-}
-
-// --- Portfolio & Risk Types ---
 
 export interface Position {
   id: string;
-  baseAsset: string; // BTC
-  symbol: string; // BTCUSDT
-  venue: 'SPOT' | 'PERP_USDT' | 'FUTURE_USDT'; 
+  baseAsset: string;
+  symbol: string;
+  venue: string;
   side: 'LONG' | 'SHORT';
-  quantity: number; // Always positive
+  quantity: number;
   avgEntryPrice: number;
   timestamp: number;
   strategyId?: string;
@@ -152,8 +251,8 @@ export interface Position {
 
 export interface LivePosition extends Position {
   markPrice: number;
-  notionalBase: number; // quantity * 1 (or contract multiplier)
-  notionalUsd: number; // quantity * markPrice
+  notionalBase: number;
+  notionalUsd: number;
   unrealizedPnl: number;
   pnlPercent: number;
 }
@@ -169,45 +268,28 @@ export interface PortfolioGroup {
 export interface RiskMetrics {
   totalEquity: number;
   totalPnl: number;
-  dayPnl: number; // Simple approximation
+  dayPnl: number;
   netDeltaUsd: number;
   longExposure: number;
   shortExposure: number;
-  leverage: number; // gross / equity
+  leverage: number;
 }
 
 export interface CarryMetric {
-    baseAsset: string;
-    spotPrice: number;
-    perpPrice: number;
-    basisBps: number;
-    fundingRate: number;
-    impliedCarryApr: number;
+  baseAsset: string;
+  spotPrice: number;
+  perpPrice: number;
+  basisBps: number;
+  fundingRate: number;
+  impliedCarryApr: number;
 }
-
-// --- MARS (Risk System) Types ---
 
 export interface RiskLimit {
   id: string;
   type: 'DESK' | 'STRATEGY' | 'TRADER' | 'SYMBOL' | 'VENUE';
-  entityId: string; // The ID of the strategy, trader, etc.
+  entityId: string;
   limitNotionalUsd: number;
   isHardBlock: boolean;
-}
-
-export interface RiskNode {
-  id: string;
-  name: string;
-  type: 'DESK' | 'STRATEGY' | 'TRADER' | 'SYMBOL' | 'VENUE';
-  grossExposureUsd: number;
-  netExposureUsd: number;
-  longExposureUsd: number;
-  shortExposureUsd: number;
-  limitUsd: number;
-  utilization: number; // 0 to 1
-  isBreached: boolean;
-  children?: RiskNode[];
-  isBlocked?: boolean;
 }
 
 export interface RiskOverrideLog {
@@ -219,39 +301,19 @@ export interface RiskOverrideLog {
   reason: string;
 }
 
-// --- STRAT (Strategy Management) Types ---
-
-export type StrategyState = 'RUNNING' | 'PAUSED' | 'DRAINING' | 'ERROR';
-
-export interface StrategyInstance {
+export interface RiskNode {
   id: string;
   name: string;
-  family: string;
-  desk: string;
-  owner: string;
-  venues: string[];
-  instruments: string[];
-  state: StrategyState;
-  
-  // Operational Health (Mocked)
-  rejectRate: number; // %
-  avgSlippageBps: number;
-  medianTimeToFillMs: number;
-  lastTickAgeMs: number;
-  
-  // Performance (Mocked/Aggregated)
-  pnlDay: number;
-  pnlMtd: number;
-  hitRate: number; // %
-  avgTradeSizeUsd: number;
-  sharpeRatio: number;
-  profitFactor: number;
-
-  riskFlags: string[];
-
-  // Live Aggregate Notional (Injected by Hook)
-  grossNotionalUsd?: number;
-  netNotionalUsd?: number;
+  type: string;
+  grossExposureUsd: number;
+  netExposureUsd: number;
+  longExposureUsd: number;
+  shortExposureUsd: number;
+  limitUsd: number;
+  utilization: number;
+  isBreached: boolean;
+  children?: RiskNode[];
+  isBlocked?: boolean;
 }
 
 export interface StrategyLog {
@@ -259,109 +321,44 @@ export interface StrategyLog {
   strategyId: string;
   user: string;
   action: string;
-  oldState?: string;
-  newState?: string;
+  oldState?: StrategyState;
+  newState?: StrategyState;
   reason: string;
 }
 
-// --- SHOCK (Scenario Analysis) Types ---
-
-export interface ShockParameter {
-  id: string;
-  type: 'SPOT_PCT' | 'FUTURES_PCT' | 'FUNDING_ABS' | 'BASIS_BPS';
-  scope: 'GLOBAL' | 'ASSET' | 'STRATEGY';
-  target?: string; // e.g. 'BTC' or 'TREND_FOLLOW'
-  value: number; // e.g. -5 for -5% or 0.01 for 0.01%
+export interface FeedHealth {
+  venue: Venue;
+  status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR';
+  latencyMs: number;
+  messageCount: number;
+  errorCount: number;
 }
 
-export interface ShockScenario {
-  id: string;
-  name: string;
-  parameters: ShockParameter[];
-}
-
-export interface ShockResultNode {
-  id: string;
-  name: string;
-  type: 'DESK' | 'STRATEGY' | 'ASSET';
-  
-  // Current Live State
-  currentPnl: number;
-  currentGross: number;
-  currentUtilization: number;
-
-  // Hypothetical State
-  shockPnl: number; // The new Total PnL
-  shockDeltaPnl: number; // Change in PnL (Scenario Impact)
-  shockGross: number;
-  shockUtilization: number;
-  
-  isBreached: boolean;
-  isMarginCall: boolean; // Mock metric
-
-  children?: ShockResultNode[];
-}
-
-// --- FLOW (Execution Analytics) Types ---
-
-export interface FlowFill {
-    id: string;
-    orderId: string;
-    strategyId: string;
+export interface Quote {
     symbol: string;
-    side: 'BUY' | 'SELL';
-    price: number;
-    size: number;
-    notional: number;
-    slippageBps: number; // vs arrival mid
-    fee: number;
-    timestamp: number;
-    liquidity: 'MAKER' | 'TAKER';
-    venue: string;
+    bidPrice: number;
+    askPrice: number;
+    bidSize: number;
+    askSize: number;
 }
 
-export interface FlowOrder {
-    id: string;
-    strategyId: string;
-    symbol: string;
-    side: 'BUY' | 'SELL';
-    price: number; // 0 for Market
-    size: number;
-    status: 'FILLED' | 'CANCELED' | 'REJECTED' | 'NEW' | 'PARTIAL';
-    timestamp: number;
-    latencyMs: number;
-    
-    // OMS Specific
-    type?: 'LIMIT' | 'MARKET';
-    tif?: 'GTC' | 'IOC' | 'FOK';
-    traderId?: string;
-    venue?: string;
-    filledSize?: number;
-    avgFillPrice?: number;
+export interface Credential {
+  accountId: string;
+  venue: Venue;
+  apiKey: string;
+  secretKey: string;
+  permissions: string[];
+  env: 'MAINNET' | 'TESTNET';
 }
 
-export interface FlowAggregatedRow {
-    key: string; // Grouping Key
-    label: string;
-    
-    // Volume & Counts
-    totalNotional: number;
-    totalVolume: number;
-    fillCount: number;
-    orderCount: number;
-    
-    // Directional
-    netNotional: number; // +Buy, -Sell
-    buyNotional: number;
-    sellNotional: number;
-
-    // Execution Quality
-    avgSlippageBps: number;
-    medianSlippageBps: number;
-    fillRatio: number; // Fills / Orders (Simple view)
-    takerPct: number; // % of volume taken
-    rejectRate: number; // % of orders rejected
-    
-    // Timing
-    avgLatencyMs: number;
+export interface AccountState {
+  accountId: string;
+  venue: Venue;
+  totalWalletBalance: number;
+  totalUnrealizedPnl: number;
+  totalMarginBalance: number;
+  totalMaintenanceMargin: number;
+  availableBalance: number;
+  positions: LivePosition[];
+  lastUpdate: number;
 }
