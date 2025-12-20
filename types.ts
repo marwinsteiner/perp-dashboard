@@ -247,6 +247,8 @@ export interface Position {
   timestamp: number;
   strategyId?: string;
   traderId?: string;
+  // Added optional marginType property used in AccountManagerWidget to resolve missing property error
+  marginType?: string;
 }
 
 export interface LivePosition extends Position {

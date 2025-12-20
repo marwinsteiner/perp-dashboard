@@ -9,17 +9,17 @@ interface CommandInfo {
 }
 
 const COMMANDS: CommandInfo[] = [
-  { cmd: 'CS', description: 'Open the Crypto Screener (Watchlist). Monitor real-time basis and funding.', category: 'Navigation' },
-  { cmd: 'PORT', description: 'Open the Portfolio and Carry monitor. View positions and delta aggregates.', category: 'Navigation' },
-  { cmd: 'MARS', description: 'Multi-Asset Risk System. Monitor desk/strategy/trader limits and utilization.', category: 'Risk Management' },
-  { cmd: 'STRAT', description: 'Strategy Control & Health. Monitor systematic strategies and apply overrides.', category: 'Operations' },
-  { cmd: 'CORE', description: 'Infrastructure & Connectivity Engine. Monitor feed health, latency, and system audit logs.', category: 'Operations' },
-  { cmd: 'ACCT', description: 'Account & Credential Registry. Manage API keys, subaccounts, and live account states.', category: 'Operations' },
-  { cmd: 'SAVE', description: 'Open the workspace save dialog to store the current window layout.', category: 'Utility' },
-  { cmd: 'H', description: 'Open this Help & Documentation system.', category: 'Utility' },
-  { cmd: 'F [SYM]', description: 'Focus View. Open depth ladders and micro-metrics for a symbol.', category: 'Analytical', example: 'F BTC' },
-  { cmd: 'C [SYM]', description: 'Basis Chart. Open the interactive basis/funding candlestick chart.', category: 'Analytical', example: 'C ETH' },
-  { cmd: 'Q [SYM]', description: 'Futures Curve. Open the futures term structure (dated futures vs perp).', category: 'Analytical', example: 'Q SOL' },
+  { cmd: 'CS', description: 'Open the Crypto Screener (Watchlist). Monitor real-time basis and funding rates.', category: 'Navigation' },
+  { cmd: 'PORT', description: 'Open the Portfolio and Carry monitor. Aggregate positions by Asset, Strategy, or Venue.', category: 'Navigation' },
+  { cmd: 'MARS', description: 'Multi-Asset Risk System. Monitor global utilization, desk limits, and hard blocks.', category: 'Risk & Audit' },
+  { cmd: 'STRAT', description: 'Strategy Health & Control. Manage lifecycle (Halt/Kill) and Quant Research sync.', category: 'Operations' },
+  { cmd: 'CORE', description: 'Infrastructure Engine. View feed health, system latency, and append-only audit logs.', category: 'Operations' },
+  { cmd: 'ACCT', description: 'Account Registry. Manage API credentials, subaccounts, and wallet balances.', category: 'Operations' },
+  { cmd: 'SAVE', description: 'Capture the current window layout into a persistent named workspace.', category: 'Utility' },
+  { cmd: 'H', description: 'Open this documentation and command reference guide.', category: 'Utility' },
+  { cmd: 'F [SYM]', description: 'Focus View. Open depth ladders and micro-metrics for specific symbols.', category: 'Analytical', example: 'F BTC' },
+  { cmd: 'C [SYM]', description: 'Basis Chart. High-fidelity basis and funding candlestick visualizer.', category: 'Analytical', example: 'C ETH' },
+  { cmd: 'Q [SYM]', description: 'Futures Curve. Visualize term structure and implied yields across tenors.', category: 'Analytical', example: 'Q SOL' },
 ];
 
 interface HelpWidgetProps {
@@ -30,41 +30,42 @@ const HelpWidget: React.FC<HelpWidgetProps> = ({ onTriggerCommand }) => {
   const categories = Array.from(new Set(COMMANDS.map(c => c.category)));
 
   return (
-    <div className="h-full flex flex-col bg-[#050505] font-mono p-6 overflow-auto">
-      <div className="max-w-4xl mx-auto w-full">
-        {/* Header */}
-        <div className="border-b-2 border-cyan-800 pb-4 mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="bg-cyan-900 text-black px-2 py-1 font-bold text-sm">HELP</span>
-            <h1 className="text-white text-xl font-bold tracking-tighter">TermiFi Command Reference</h1>
+    <div className="h-full flex flex-col bg-[#050505] font-mono p-8 overflow-auto">
+      <div className="max-w-5xl mx-auto w-full">
+        {/* Header Section */}
+        <div className="border-b-2 border-cyan-800 pb-6 mb-10">
+          <div className="flex items-center gap-4 mb-3">
+            <span className="bg-cyan-700 text-black px-3 py-1 font-bold text-sm tracking-widest">DOCS</span>
+            <h1 className="text-white text-2xl font-bold tracking-tighter">TermiFi Operational Manual</h1>
           </div>
-          <p className="text-gray-500 text-xs">
-            TermiFi is a command-driven execution and monitoring cockpit. Use the <span className="text-amber-600 font-bold">/</span> key to enter command mode.
+          <p className="text-gray-500 text-xs leading-relaxed max-w-2xl">
+            TermiFi is an professional-grade command-and-control center. Navigation is primarily driven via the command line interface (<span className="text-amber-500 font-bold">/</span>). 
+            All critical operations require multi-factor sign-off and are logged to the immutable audit trail.
           </p>
         </div>
 
-        {/* Categories */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Command Matrix */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
           {categories.map(cat => (
-            <div key={cat} className="space-y-4">
-              <h2 className="text-cyan-600 text-[10px] font-bold uppercase tracking-widest border-l-2 border-cyan-900 pl-2">{cat}</h2>
-              <div className="space-y-3">
+            <div key={cat} className="space-y-5">
+              <h2 className="text-cyan-600 text-[10px] font-bold uppercase tracking-[0.3em] border-l-4 border-cyan-900 pl-3">{cat}</h2>
+              <div className="space-y-4">
                 {COMMANDS.filter(c => c.category === cat).map(item => (
                   <div 
                     key={item.cmd}
                     onClick={() => onTriggerCommand(item.cmd.split(' ')[0])}
-                    className="group cursor-pointer bg-neutral-900/40 border border-gray-900 hover:border-cyan-800 p-3 transition-all duration-150"
+                    className="group cursor-pointer bg-neutral-900/20 border border-gray-800 hover:border-cyan-700 p-4 transition-all duration-200 hover:shadow-[0_0_15px_rgba(6,182,212,0.1)]"
                   >
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-amber-500 font-bold text-sm">/{item.cmd}</span>
-                      <span className="opacity-0 group-hover:opacity-100 text-[9px] text-cyan-600 font-bold">CLICK TO ENTER</span>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-amber-500 font-bold text-sm tracking-tighter">/{item.cmd}</span>
+                      <span className="opacity-0 group-hover:opacity-100 text-[9px] text-cyan-600 font-bold uppercase tracking-widest">Execute Command</span>
                     </div>
-                    <p className="text-gray-400 text-[11px] leading-relaxed">
+                    <p className="text-gray-400 text-[11px] leading-relaxed font-sans">
                       {item.description}
                     </p>
                     {item.example && (
-                      <div className="mt-2 text-[9px] text-gray-600 font-mono italic">
-                        Example: {item.example}
+                      <div className="mt-3 text-[9px] text-gray-600 font-mono italic bg-black/40 px-2 py-1 inline-block">
+                        CMD> {item.example}
                       </div>
                     )}
                   </div>
@@ -74,15 +75,30 @@ const HelpWidget: React.FC<HelpWidgetProps> = ({ onTriggerCommand }) => {
           ))}
         </div>
 
-        {/* Footer info */}
-        <div className="mt-12 pt-8 border-t border-gray-900 text-[10px] text-gray-700 leading-loose">
-          <h3 className="text-gray-500 font-bold uppercase mb-2">Interface Keybindings</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div><span className="text-gray-400">/</span> - Activate command entry</div>
-            <div><span className="text-gray-400">CTRL+S</span> - Quick save workspace</div>
-            <div><span className="text-gray-400">ESC</span> - Close command mode or modals</div>
-            <div><span className="text-gray-400">⌘+ARROWS</span> - Snapping windows (floating mode)</div>
-            <div><span className="text-gray-400">1, 2, 3</span> - Switch chart timeframe (active chart)</div>
+        {/* Workflow & Hotkeys Section */}
+        <div className="mt-16 grid grid-cols-1 md:grid-cols-2 gap-10 pt-10 border-t border-neutral-900">
+          <div>
+            <h3 className="text-gray-500 font-bold uppercase text-[10px] mb-4 tracking-[0.2em]">Operational Hotkeys</h3>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-[11px]">
+              <div className="flex justify-between border-b border-gray-900 pb-1"><span className="text-cyan-700">/</span> <span className="text-gray-400">Command Input</span></div>
+              <div className="flex justify-between border-b border-gray-900 pb-1"><span className="text-cyan-700">ESC</span> <span className="text-gray-400">Exit Mode / Clear</span></div>
+              <div className="flex justify-between border-b border-gray-900 pb-1"><span className="text-cyan-700">CTRL+S</span> <span className="text-gray-400">Save Workspace</span></div>
+              <div className="flex justify-between border-b border-gray-900 pb-1"><span className="text-cyan-700">1 / 2 / 3</span> <span className="text-gray-400">Chart Timeframe</span></div>
+              <div className="flex justify-between border-b border-gray-900 pb-1"><span className="text-cyan-700">ARROWS</span> <span className="text-gray-400">Watchlist Nav</span></div>
+              <div className="flex justify-between border-b border-gray-900 pb-1"><span className="text-cyan-700">ENTER</span> <span className="text-gray-400">Focus Selection</span></div>
+            </div>
+          </div>
+
+          <div className="bg-red-900/5 border border-red-900/30 p-5 rounded-sm">
+            <h3 className="text-red-600 font-bold uppercase text-[10px] mb-4 tracking-[0.2em] flex items-center gap-2">
+               <span className="animate-pulse">●</span> Emergency Intervention Workflow
+            </h3>
+            <p className="text-[10px] text-gray-500 leading-relaxed mb-4">
+              When executing critical strategy controls (Halt, Soft Kill, Kill), the system enforces a <strong>Mandatory Sign-Off</strong>. Users must provide their authorized Personnel ID and a valid reason for intervention.
+            </p>
+            <div className="text-[9px] text-red-500 font-bold uppercase">
+              All sign-offs are instantly broadcast to the CORE INFRA Audit Log with timestamps and actor metadata.
+            </div>
           </div>
         </div>
       </div>

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useMarketData } from '../hooks/useMarketData';
 import TerminalRow from './TerminalRow';
@@ -71,7 +72,8 @@ const WatchlistWidget: React.FC<WatchlistWidgetProps> = ({ onSelectSymbol, isAct
                         key={data.symbol} 
                         data={data} 
                         isSelected={idx === selectedIndex}
-                        innerRef={(el) => (rowRefs.current[data.symbol] = el)}
+                        // Wrap assignment in curly braces to ensure the callback returns void.
+                        innerRef={(el) => { rowRefs.current[data.symbol] = el; }}
                     />
                     ))}
                 </tbody>
