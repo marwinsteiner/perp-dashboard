@@ -17,6 +17,7 @@ import SaveScreenModal from './SaveScreenModal';
 import BinanceService from '../services/binanceService';
 import { useFuturesCurve } from '../hooks/useFuturesCurve';
 import auditLogService from '../services/auditLogService';
+import configService from '../services/configService';
 
 // --- SERVICE WRAPPERS ---
 
@@ -52,7 +53,11 @@ const CurveWrapper = ({ symbol }: { symbol: string }) => {
 
 // --- MAIN SHELL ---
 
-const CryptoDashboard: React.FC = () => {
+interface CryptoDashboardProps {
+  onLogout?: () => void;
+}
+
+const CryptoDashboard: React.FC<CryptoDashboardProps> = ({ onLogout }) => {
   const [windows, setWindows] = useState<WindowState[]>([
     { id: 'cs-main', type: 'SCREENER', title: 'CRYPTO SCREENER', isFloating: false, isMinimized: false, zIndex: 1, x: 0, y: 0, w: 0, h: 0 }
   ]);
@@ -76,7 +81,7 @@ const CryptoDashboard: React.FC = () => {
               console.error("Failed to parse saved screens", e);
           }
       }
-      auditLogService.log('SYSTEM', 'SYSTEM', 'Dashboard Initialized.');
+      auditLogService.log('SYSTEM', 'SYSTEM', `Dashboard Initialized. Mode: ${configService.isDemoMode ? 'DEMO' : 'PRODUCTION'}`);
   }, []);
 
   const createWindow = (type: ViewType, symbol?: string) => {
@@ -294,6 +299,19 @@ const CryptoDashboard: React.FC = () => {
       {/* HEADER / TABS */}
       <div className="bg-neutral-900 border-b border-gray-800 flex h-8 shrink-0">
           <div className="flex items-center px-4 bg-cyan-900 text-black font-bold text-xs select-none">TERMIFI</div>
+          
+          {/* ENVIRONMENT BADGE */}
+          <div 
+            onClick={onLogout}
+            className={`
+            flex items-center px-3 text-[10px] font-bold border-r border-gray-800 select-none cursor-pointer hover:bg-white/5 transition-colors
+            ${configService.isDemoMode ? 'bg-amber-900/40 text-amber-500' : 'bg-green-900/40 text-green-500'}
+          `}
+            title="Click to Switch Context / Logout"
+          >
+             {configService.isDemoMode ? 'DEMO ENVIRONMENT' : 'PRODUCTION'}
+          </div>
+
           <div className="flex-1 flex items-end px-2 gap-1 overflow-x-auto">
               {windows.filter(w => !w.isMinimized).map(w => (
                   <div 

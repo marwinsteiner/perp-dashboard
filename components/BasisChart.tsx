@@ -1,5 +1,6 @@
+
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, CrosshairMode, LineStyle } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, CrosshairMode } from 'lightweight-charts';
 import BinanceService from '../services/binanceService';
 import { Kline } from '../types';
 
@@ -19,6 +20,10 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
   const perpSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const basisSeriesRef = useRef<ISeriesApi<"Area"> | null>(null);
   const fundingSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+
+  // Store last known candles to calculate real-time basis difference
+  const lastSpotRef = useRef<Kline | null>(null);
+  const lastPerpRef = useRef<Kline | null>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -100,8 +105,7 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
         }
     });
 
-    // D) Funding Rate (Overlay on Basis or Top?) - Let's put it on the Basis pane or a tiny strip
-    // Let's use markers on the time axis or a separate histogram on the basis pane
+    // D) Funding Rate (Overlay on Basis or Top?)
     const fundingSeries = chart.addHistogramSeries({
         color: '#f97316', // Orange
         priceScaleId: 'funding',
@@ -117,7 +121,7 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
         visible: false // Hide scale axis to avoid clutter, just show bars
     });
 
-    // 3. Load Data
+    // 3. Load Initial History
     const loadData = async () => {
         try {
             const [spotKlines, perpKlines, fundingHistory] = await Promise.all([
@@ -126,7 +130,6 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
                 service.getFundingRateHistory(symbol)
             ]);
 
-            // Format Candles
             const spotData = spotKlines.map(k => ({
                 time: k.openTime / 1000 as any,
                 open: k.open, high: k.high, low: k.low, close: k.close
@@ -136,9 +139,11 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
                 open: k.open, high: k.high, low: k.low, close: k.close
             }));
 
-            // Format Basis (Perp Close - Spot Close in BPS)
-            // We need to match timestamps. Klines should be roughly aligned if limits match.
-            // A more robust map intersection is ideal but for '1m' generic sync is okay.
+            // Sync last known state
+            if (spotKlines.length) lastSpotRef.current = spotKlines[spotKlines.length - 1];
+            if (perpKlines.length) lastPerpRef.current = perpKlines[perpKlines.length - 1];
+
+            // Build Basis History
             const basisData: any[] = [];
             const timestampMap = new Map<any, number>();
             spotData.forEach(s => timestampMap.set(s.time, s.close));
@@ -150,7 +155,6 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
                     basisData.push({
                         time: p.time,
                         value: basisBps,
-                        // Color the area based on value
                         topColor: basisBps > 0 ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.0)',
                         bottomColor: basisBps > 0 ? 'rgba(34, 197, 94, 0.0)' : 'rgba(239, 68, 68, 0.4)',
                         lineColor: basisBps > 0 ? '#22c55e' : '#ef4444'
@@ -158,10 +162,9 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
                 }
             });
 
-            // Format Funding
             const fundingData = fundingHistory.map(f => ({
                 time: f.fundingTime / 1000 as any,
-                value: f.fundingRate * 100, // as percentage
+                value: f.fundingRate * 100,
                 color: f.fundingRate > 0 ? '#f97316' : '#22d3ee'
             })).sort((a,b) => a.time - b.time);
 
@@ -177,7 +180,42 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
 
     loadData();
 
-    // Resize Handler
+    // 4. Subscribe to Real-Time Updates
+    const unsubSpot = service.subscribeCandles(symbol, 'SPOT', timeframe, (kline) => {
+        lastSpotRef.current = kline;
+        spotSeriesRef.current?.update({
+            time: kline.openTime / 1000 as any,
+            open: kline.open, high: kline.high, low: kline.low, close: kline.close
+        });
+        updateBasis();
+    });
+
+    const unsubPerp = service.subscribeCandles(symbol, 'FUTURES', timeframe, (kline) => {
+        lastPerpRef.current = kline;
+        perpSeriesRef.current?.update({
+            time: kline.openTime / 1000 as any,
+            open: kline.open, high: kline.high, low: kline.low, close: kline.close
+        });
+        updateBasis();
+    });
+
+    const updateBasis = () => {
+        const s = lastSpotRef.current;
+        const p = lastPerpRef.current;
+        
+        // Only update basis if we have matching candles for the same period
+        if (s && p && Math.abs(s.openTime - p.openTime) < 1000) {
+            const basisBps = ((p.close - s.close) / s.close) * 10000;
+            basisSeriesRef.current?.update({
+                time: s.openTime / 1000 as any,
+                value: basisBps,
+                topColor: basisBps > 0 ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.0)',
+                bottomColor: basisBps > 0 ? 'rgba(34, 197, 94, 0.0)' : 'rgba(239, 68, 68, 0.4)',
+                lineColor: basisBps > 0 ? '#22c55e' : '#ef4444'
+            });
+        }
+    };
+
     const handleResize = () => {
         if (chartContainerRef.current) {
             chart.applyOptions({ 
@@ -190,6 +228,8 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      unsubSpot();
+      unsubPerp();
       chart.remove();
     };
   }, [symbol, timeframe]);

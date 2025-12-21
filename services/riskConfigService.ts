@@ -1,22 +1,36 @@
 
 import { RiskLimit, RiskOverrideLog } from '../types';
+import configService from './configService';
+
+const SEED_LIMITS: RiskLimit[] = [
+  { id: 'l1', type: 'DESK', entityId: 'MAIN_DESK', limitNotionalUsd: 10000000, isHardBlock: true },
+  { id: 'l2', type: 'STRATEGY', entityId: 'ARB_DELTA_NEUTRAL', limitNotionalUsd: 5000000, isHardBlock: true },
+  { id: 'l3', type: 'STRATEGY', entityId: 'TREND_FOLLOW', limitNotionalUsd: 2000000, isHardBlock: false },
+  { id: 'l4', type: 'TRADER', entityId: 'ALICE', limitNotionalUsd: 1000000, isHardBlock: true },
+  { id: 'l5', type: 'TRADER', entityId: 'BOB', limitNotionalUsd: 1000000, isHardBlock: true },
+  { id: 'l6', type: 'SYMBOL', entityId: 'BTCUSDT', limitNotionalUsd: 4000000, isHardBlock: true },
+  { id: 'l7', type: 'SYMBOL', entityId: 'ETHUSDT', limitNotionalUsd: 2000000, isHardBlock: true },
+  { id: 'l8', type: 'VENUE', entityId: 'SPOT', limitNotionalUsd: 5000000, isHardBlock: false },
+  { id: 'l9', type: 'VENUE', entityId: 'PERP_USDT', limitNotionalUsd: 8000000, isHardBlock: true },
+];
+
+const SEED_BLOCKS = ['STRATEGY_TREND_FOLLOW:SOLUSDT'];
 
 class RiskConfigService {
-  private limits: RiskLimit[] = [
-    { id: 'l1', type: 'DESK', entityId: 'MAIN_DESK', limitNotionalUsd: 10000000, isHardBlock: true },
-    { id: 'l2', type: 'STRATEGY', entityId: 'ARB_DELTA_NEUTRAL', limitNotionalUsd: 5000000, isHardBlock: true },
-    { id: 'l3', type: 'STRATEGY', entityId: 'TREND_FOLLOW', limitNotionalUsd: 2000000, isHardBlock: false },
-    { id: 'l4', type: 'TRADER', entityId: 'ALICE', limitNotionalUsd: 1000000, isHardBlock: true },
-    { id: 'l5', type: 'TRADER', entityId: 'BOB', limitNotionalUsd: 1000000, isHardBlock: true },
-    { id: 'l6', type: 'SYMBOL', entityId: 'BTCUSDT', limitNotionalUsd: 4000000, isHardBlock: true },
-    { id: 'l7', type: 'SYMBOL', entityId: 'ETHUSDT', limitNotionalUsd: 2000000, isHardBlock: true },
-    { id: 'l8', type: 'VENUE', entityId: 'SPOT', limitNotionalUsd: 5000000, isHardBlock: false },
-    { id: 'l9', type: 'VENUE', entityId: 'PERP_USDT', limitNotionalUsd: 8000000, isHardBlock: true },
-  ];
-
-  private blocks: string[] = ['STRATEGY_TREND_FOLLOW:SOLUSDT']; // Example: Trend Follow strategy blocked from SOL
-
+  private limits: RiskLimit[] = [];
+  private blocks: string[] = [];
   private overrideLogs: RiskOverrideLog[] = [];
+
+  constructor() {
+    if (configService.isDemoMode) {
+      this.limits = JSON.parse(JSON.stringify(SEED_LIMITS));
+      this.blocks = [...SEED_BLOCKS];
+    } else {
+      // Production: Start with empty or fetch from risk engine
+      this.limits = [];
+      this.blocks = [];
+    }
+  }
 
   public getLimits(): RiskLimit[] {
     return this.limits;

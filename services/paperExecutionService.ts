@@ -1,8 +1,9 @@
 
 import { Position } from '../types';
 import { v4 as uuidv4 } from 'uuid';
+import configService from './configService';
 
-// Seed Data for a Delta Neutral Desk
+// Seed Data for a Delta Neutral Desk (Demo Only)
 const SEED_POSITIONS: Position[] = [
     { id: '1', baseAsset: 'BTC', symbol: 'BTCUSDT', venue: 'SPOT', side: 'LONG', quantity: 25, avgEntryPrice: 96500, timestamp: Date.now(), strategyId: 'ARB_DELTA_NEUTRAL', traderId: 'ALICE' },
     { id: '2', baseAsset: 'BTC', symbol: 'BTCUSDT', venue: 'PERP_USDT', side: 'SHORT', quantity: 25, avgEntryPrice: 96800, timestamp: Date.now(), strategyId: 'ARB_DELTA_NEUTRAL', traderId: 'ALICE' },
@@ -24,6 +25,7 @@ class PaperExecutionService {
 
     private load() {
         const stored = localStorage.getItem('termifi_paper_positions');
+        
         if (stored) {
             try {
                 this.positions = JSON.parse(stored);
@@ -33,10 +35,21 @@ class PaperExecutionService {
             }
         }
         
-        // Seed if empty for demo purposes
-        if (this.positions.length === 0) {
-            this.positions = SEED_POSITIONS;
-            this.save();
+        // Demo Mode Logic:
+        // If we are in Demo Mode and have NO positions, seed them.
+        // If we are NOT in Demo Mode, we should not be using seed data (unless user manually entered them, but for safety, start clean if local storage was empty).
+        // Actually, if we switch to PROD, we probably shouldn't show seed data at all even if it's in local storage.
+        
+        if (configService.isDemoMode) {
+             if (this.positions.length === 0) {
+                this.positions = SEED_POSITIONS;
+                this.save();
+             }
+        } else {
+             // Production mode logic - ensure we don't accidentally load demo data if we can distinguish it.
+             // For now, if config is PROD, we only use what's in local storage if explicitly saved there, 
+             // but arguably we should start empty.
+             // Let's assume Production means "Connect to EMS" which this service mocks, so in Prod this service acts as a pass-through.
         }
     }
 
