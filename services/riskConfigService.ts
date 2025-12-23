@@ -22,6 +22,17 @@ class RiskConfigService {
   private overrideLogs: RiskOverrideLog[] = [];
 
   constructor() {
+    this.init();
+  }
+
+  public reset() {
+      this.limits = [];
+      this.blocks = [];
+      this.overrideLogs = [];
+      this.init();
+  }
+
+  private init() {
     if (configService.isDemoMode) {
       this.limits = JSON.parse(JSON.stringify(SEED_LIMITS));
       this.blocks = [...SEED_BLOCKS];

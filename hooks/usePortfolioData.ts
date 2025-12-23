@@ -1,5 +1,7 @@
+
 import { useEffect, useState, useRef, useMemo } from 'react';
 import paperExecutionService from '../services/paperExecutionService';
+import accountRegistryService from '../services/accountRegistryService';
 import BinanceService from '../services/binanceService';
 import { Position, LivePosition, PortfolioGroup, RiskMetrics, CarryMetric } from '../types';
 
@@ -118,10 +120,16 @@ export const usePortfolioData = () => {
             const shortExposure = flat.filter(p => p.side === 'SHORT').reduce((acc, p) => acc + p.notionalUsd, 0);
             const netDeltaUsd = longExposure - shortExposure; // Simple net
             
-            // Mock Equity for leverage calc (Base 1M + PnL)
-            const BASE_CAPITAL = 1000000;
-            const totalEquity = BASE_CAPITAL + totalPnl;
-            const leverage = (longExposure + shortExposure) / totalEquity;
+            // Aggregated Wallet Balance from Account Registry
+            const accountStates = accountRegistryService.getAllStates();
+            const totalWalletBalance = accountStates.reduce((sum, acc) => sum + acc.totalWalletBalance, 0);
+            
+            // Total Equity = Wallet Balance + Unrealized PnL
+            const totalEquity = totalWalletBalance + totalPnl;
+            
+            // Leverage = Gross Notional / Total Equity
+            // Handle divide by zero / negative equity edge cases gracefully
+            const leverage = totalEquity > 0 ? (longExposure + shortExposure) / totalEquity : 0;
 
             setGroups(finalGroups);
             setMetrics({

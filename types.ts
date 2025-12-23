@@ -19,6 +19,7 @@ export interface Trade extends NormalizedEvent {
   qty: number;
   time: number;
   isBuyerMaker: boolean;
+  orderId?: string; // Link to order
 }
 
 export interface Bar extends NormalizedEvent {
@@ -55,14 +56,28 @@ export interface BacktestContext {
   getPosition: (symbol: string) => number;
 }
 
+export type OrderStatus = 'NEW' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCELLED' | 'REJECTED';
+export type OrderType = 'MARKET' | 'LIMIT';
+export type TimeInForce = 'GTC' | 'IOC' | 'FOK';
+
 export interface Order {
   id: string;
   symbol: string;
-  side: 'BUY' | 'SELL';
+  venue: Venue;
+  side: Side;
   qty: number;
   price?: number;
-  type: 'MARKET' | 'LIMIT';
-  status: 'NEW' | 'FILLED' | 'CANCELLED';
+  arrivalPrice?: number; // Mid-price at the time order was placed
+  type: OrderType;
+  tif?: TimeInForce;
+  status: OrderStatus;
+  filledQty: number;
+  avgFillPrice: number;
+  timestamp: number;
+  firstFillTime?: number;
+  fullFillTime?: number;
+  strategyId?: string;
+  traderId?: string;
 }
 
 // --- Backtesting & Research Types ---
@@ -135,7 +150,7 @@ export interface AuditEntry {
   payload?: any;
 }
 
-export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE' | 'MARS' | 'STRAT' | 'HELP' | 'CORE' | 'ACCT';
+export type ViewType = 'SCREENER' | 'PORTFOLIO' | 'FOCUS' | 'CHART' | 'CURVE' | 'MARS' | 'STRAT' | 'HELP' | 'CORE' | 'ACCT' | 'TICKET' | 'OMS' | 'BLOTTER' | 'SHOCK' | 'FLOW';
 
 export interface WindowState {
   id: string;

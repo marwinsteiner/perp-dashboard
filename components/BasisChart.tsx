@@ -27,6 +27,9 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
+    
+    // GUARD: Track if chart is active to prevent updates after unmount/disposal
+    let isChartActive = true;
 
     // 1. Initialize Chart
     const chart = createChart(chartContainerRef.current, {
@@ -130,6 +133,9 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
                 service.getFundingRateHistory(symbol)
             ]);
 
+            // Check if component unmounted/disposed during fetch
+            if (!isChartActive) return;
+
             const spotData = spotKlines.map(k => ({
                 time: k.openTime / 1000 as any,
                 open: k.open, high: k.high, low: k.low, close: k.close
@@ -180,26 +186,10 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
 
     loadData();
 
-    // 4. Subscribe to Real-Time Updates
-    const unsubSpot = service.subscribeCandles(symbol, 'SPOT', timeframe, (kline) => {
-        lastSpotRef.current = kline;
-        spotSeriesRef.current?.update({
-            time: kline.openTime / 1000 as any,
-            open: kline.open, high: kline.high, low: kline.low, close: kline.close
-        });
-        updateBasis();
-    });
-
-    const unsubPerp = service.subscribeCandles(symbol, 'FUTURES', timeframe, (kline) => {
-        lastPerpRef.current = kline;
-        perpSeriesRef.current?.update({
-            time: kline.openTime / 1000 as any,
-            open: kline.open, high: kline.high, low: kline.low, close: kline.close
-        });
-        updateBasis();
-    });
-
+    // Helper: updateBasis
     const updateBasis = () => {
+        if (!isChartActive) return;
+
         const s = lastSpotRef.current;
         const p = lastPerpRef.current;
         
@@ -216,8 +206,29 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
         }
     };
 
+    // 4. Subscribe to Real-Time Updates
+    const unsubSpot = service.subscribeCandles(symbol, 'SPOT', timeframe, (kline) => {
+        if (!isChartActive) return;
+        lastSpotRef.current = kline;
+        spotSeriesRef.current?.update({
+            time: kline.openTime / 1000 as any,
+            open: kline.open, high: kline.high, low: kline.low, close: kline.close
+        });
+        updateBasis();
+    });
+
+    const unsubPerp = service.subscribeCandles(symbol, 'FUTURES', timeframe, (kline) => {
+        if (!isChartActive) return;
+        lastPerpRef.current = kline;
+        perpSeriesRef.current?.update({
+            time: kline.openTime / 1000 as any,
+            open: kline.open, high: kline.high, low: kline.low, close: kline.close
+        });
+        updateBasis();
+    });
+
     const handleResize = () => {
-        if (chartContainerRef.current) {
+        if (chartContainerRef.current && isChartActive) {
             chart.applyOptions({ 
                 width: chartContainerRef.current.clientWidth,
                 height: chartContainerRef.current.clientHeight
@@ -227,10 +238,12 @@ const BasisChart: React.FC<BasisChartProps> = ({ symbol, service }) => {
     window.addEventListener('resize', handleResize);
 
     return () => {
+      isChartActive = false; // Flag as disposed immediately
       window.removeEventListener('resize', handleResize);
       unsubSpot();
       unsubPerp();
       chart.remove();
+      chartRef.current = null;
     };
   }, [symbol, timeframe]);
 

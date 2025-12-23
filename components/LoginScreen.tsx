@@ -10,12 +10,27 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onDemo }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+
+    // 1. Basic Validation
+    if (!username.trim()) {
+        setError('ACCESS ID REQUIRED');
+        return;
+    }
+    if (!password.trim()) {
+        setError('SECURE KEY REQUIRED');
+        return;
+    }
+
     setLoading(true);
-    // Simulate auth delay
+    
+    // Simulate auth check delay
     setTimeout(() => {
+        // In a real app, this would validate against an API
         setLoading(false);
         onLogin();
     }, 800);
@@ -41,7 +56,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onDemo }) => {
                         type="text" 
                         value={username}
                         onChange={e => setUsername(e.target.value)}
-                        className="w-full bg-black border border-gray-700 text-cyan-500 p-2 text-sm focus:border-cyan-500 outline-none transition-colors"
+                        className={`w-full bg-black border ${error && !username ? 'border-red-500' : 'border-gray-700'} text-cyan-500 p-2 text-sm focus:border-cyan-500 outline-none transition-colors`}
                         placeholder="TRADER_ID"
                     />
                 </div>
@@ -51,10 +66,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onDemo }) => {
                         type="password" 
                         value={password}
                         onChange={e => setPassword(e.target.value)}
-                        className="w-full bg-black border border-gray-700 text-cyan-500 p-2 text-sm focus:border-cyan-500 outline-none transition-colors"
+                        className={`w-full bg-black border ${error && !password ? 'border-red-500' : 'border-gray-700'} text-cyan-500 p-2 text-sm focus:border-cyan-500 outline-none transition-colors`}
                         placeholder="••••••••"
                     />
                 </div>
+
+                {error && (
+                    <div className="text-red-500 text-[10px] font-bold uppercase tracking-wider text-center animate-pulse">
+                        ⚠ {error}
+                    </div>
+                )}
 
                 <button 
                     type="submit" 

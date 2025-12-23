@@ -53,6 +53,16 @@ class StrategyService {
   private logs: StrategyLog[] = [];
 
   constructor() {
+    this.init();
+  }
+
+  public reset() {
+      this.instances = [];
+      this.logs = [];
+      this.init();
+  }
+
+  private init() {
     if (configService.isDemoMode) {
       this.instances = JSON.parse(JSON.stringify(SEED_STRATEGIES));
     } else {

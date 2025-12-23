@@ -13,6 +13,11 @@ import StrategyHealthWidget from './StrategyHealthWidget';
 import HelpWidget from './HelpWidget';
 import CoreInfraWidget from './CoreInfraWidget';
 import AccountManagerWidget from './AccountManagerWidget';
+import OrderEntryTicket from './OrderEntryTicket';
+import OmsWidget from './OmsWidget';
+import BlotterWidget from './BlotterWidget';
+import RiskShockWidget from './RiskShockWidget';
+import FlowAnalyticsWidget from './FlowAnalyticsWidget';
 import SaveScreenModal from './SaveScreenModal';
 import BinanceService from '../services/binanceService';
 import { useFuturesCurve } from '../hooks/useFuturesCurve';
@@ -94,8 +99,19 @@ const CryptoDashboard: React.FC<CryptoDashboardProps> = ({ onLogout }) => {
         : type === 'STRAT' ? 'STRATEGY HEALTH'
         : type === 'CORE' ? 'CORE INFRA'
         : type === 'ACCT' ? 'ACCOUNT REGISTRY'
+        : type === 'TICKET' ? 'ORDER ENTRY'
+        : type === 'OMS' ? 'ORDER MANAGEMENT'
+        : type === 'BLOTTER' ? 'TRADE BLOTTER'
+        : type === 'SHOCK' ? 'SCENARIO SHOCK'
+        : type === 'FLOW' ? 'EXECUTION ANALYTICS'
         : 'TERMINAL DOCUMENTATION';
     
+    // Default size logic
+    let w = 600, h = 400;
+    if (type === 'TICKET') { w = 350; h = 450; }
+    if (type === 'OMS' || type === 'BLOTTER') { w = 800; h = 450; }
+    if (type === 'FLOW') { w = 1000; h = 600; }
+
     const newWin: WindowState = {
         id,
         type,
@@ -106,8 +122,8 @@ const CryptoDashboard: React.FC<CryptoDashboardProps> = ({ onLogout }) => {
         zIndex: Math.max(0, ...windows.map(w => w.zIndex)) + 1,
         x: 100 + (windows.length * 20),
         y: 100 + (windows.length * 20),
-        w: 600,
-        h: 400
+        w,
+        h
     };
 
     setWindows(prev => [...prev, newWin]);
@@ -144,8 +160,8 @@ const CryptoDashboard: React.FC<CryptoDashboardProps> = ({ onLogout }) => {
             isMinimized: false,
             x: willFloat ? 100 : w.x, 
             y: willFloat ? 100 : w.y, 
-            w: willFloat ? 800 : w.w, 
-            h: willFloat ? 500 : w.h,
+            w: willFloat ? (w.w < 500 ? 500 : w.w) : w.w, // Ensure visible size when floating
+            h: willFloat ? (w.h < 300 ? 300 : w.h) : w.h,
             zIndex: Math.max(0, ...prev.map(p => p.zIndex)) + 1
         };
     }));
@@ -245,6 +261,20 @@ const CryptoDashboard: React.FC<CryptoDashboardProps> = ({ onLogout }) => {
       } else if (cmd === 'ACCT') {
           const existing = windows.find(w => w.type === 'ACCT');
           existing ? handleTabClick(existing.id) : createWindow('ACCT');
+      } else if (cmd === 'TICKET') {
+          createWindow('TICKET');
+      } else if (cmd === 'OMS') {
+          const existing = windows.find(w => w.type === 'OMS');
+          existing ? handleTabClick(existing.id) : createWindow('OMS');
+      } else if (cmd === 'FLOW') {
+          const existing = windows.find(w => w.type === 'FLOW');
+          existing ? handleTabClick(existing.id) : createWindow('FLOW');
+      } else if (cmd === 'BLOTTER') {
+          const existing = windows.find(w => w.type === 'BLOTTER');
+          existing ? handleTabClick(existing.id) : createWindow('BLOTTER');
+      } else if (cmd === 'SHOCK') {
+          const existing = windows.find(w => w.type === 'SHOCK');
+          existing ? handleTabClick(existing.id) : createWindow('SHOCK');
       } else if (cmd === 'H' || cmd === 'HELP') {
           const existing = windows.find(w => w.type === 'HELP');
           existing ? handleTabClick(existing.id) : createWindow('HELP');
@@ -280,6 +310,11 @@ const CryptoDashboard: React.FC<CryptoDashboardProps> = ({ onLogout }) => {
           case 'STRAT': return <StrategyHealthWidget />;
           case 'CORE': return <CoreInfraWidget />;
           case 'ACCT': return <AccountManagerWidget />;
+          case 'TICKET': return <OrderEntryTicket />;
+          case 'OMS': return <OmsWidget />;
+          case 'FLOW': return <FlowAnalyticsWidget />;
+          case 'BLOTTER': return <BlotterWidget />;
+          case 'SHOCK': return <RiskShockWidget />;
           case 'HELP': return <HelpWidget onTriggerCommand={handleHelpTrigger} />;
           case 'FOCUS': return w.symbol ? <FocusWrapper symbol={w.symbol} /> : null;
           case 'CHART': return w.symbol ? <ChartWrapper symbol={w.symbol} /> : null;
@@ -376,15 +411,15 @@ const CryptoDashboard: React.FC<CryptoDashboardProps> = ({ onLogout }) => {
               <div className="text-[10px] text-amber-600 font-bold mb-1 uppercase tracking-wider">Execute Command</div>
               <div className="flex items-center gap-2">
                   <span className="text-amber-500 font-bold text-xl">/</span>
-                  <input ref={cmdInputRef} type="text" className="flex-1 bg-transparent border-none outline-none text-xl font-mono text-amber-500 uppercase" placeholder="CMD (E.G. CORE, ACCT, H, STRAT)"
+                  <input ref={cmdInputRef} type="text" className="flex-1 bg-transparent border-none outline-none text-xl font-mono text-amber-500 uppercase" placeholder="CMD (E.G. TICKET, FLOW, SHOCK)"
                     value={commandInput} onChange={e => setCommandInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && executeCommand()}
                   />
               </div>
               <div className="mt-2 text-[10px] text-gray-500 flex gap-4 uppercase">
-                  <span><strong className="text-gray-300">CORE</strong> INFRA</span>
-                  <span><strong className="text-gray-300">ACCT</strong> ACCOUNTS</span>
-                  <span><strong className="text-gray-300">H</strong> HELP</span>
-                  <span><strong className="text-gray-300">STRAT</strong> HEALTH</span>
+                  <span><strong className="text-gray-300">TICKET</strong> ORDER</span>
+                  <span><strong className="text-gray-300">OMS</strong> MANAGER</span>
+                  <span><strong className="text-gray-300">FLOW</strong> ANALYTICS</span>
+                  <span><strong className="text-gray-300">SHOCK</strong> RISK</span>
               </div>
           </div>
       )}

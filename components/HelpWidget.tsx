@@ -11,6 +11,11 @@ interface CommandInfo {
 const COMMANDS: CommandInfo[] = [
   { cmd: 'CS', description: 'Open the Crypto Screener (Watchlist). Monitor real-time basis and funding rates.', category: 'Navigation' },
   { cmd: 'PORT', description: 'Open the Portfolio and Carry monitor. Aggregate positions by Asset, Strategy, or Venue.', category: 'Navigation' },
+  { cmd: 'TICKET', description: 'Order Entry Ticket. Place manual Limit or Market orders across venues.', category: 'Execution' },
+  { cmd: 'OMS', description: 'Order Management System. View active working orders and manage order lifecycle.', category: 'Execution' },
+  { cmd: 'FLOW', description: 'Execution Quality & Order Flow Analytics. Monitor slippage, fill ratios, and desk footprints.', category: 'Execution' },
+  { cmd: 'BLOTTER', description: 'Trade Blotter. Historical view of all executed trades and fills.', category: 'Execution' },
+  { cmd: 'SHOCK', description: 'Risk Scenario Analysis. Stress test portfolio against linear market moves.', category: 'Risk & Audit' },
   { cmd: 'MARS', description: 'Multi-Asset Risk System. Monitor global utilization, desk limits, and hard blocks.', category: 'Risk & Audit' },
   { cmd: 'STRAT', description: 'Strategy Health & Control. Manage lifecycle (Halt/Kill) and Quant Research sync.', category: 'Operations' },
   { cmd: 'CORE', description: 'Infrastructure Engine. View feed health, system latency, and append-only audit logs.', category: 'Operations' },

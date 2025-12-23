@@ -27,6 +27,16 @@ class AccountRegistryService {
   private liveStates: Record<string, AccountState> = {};
 
   constructor() {
+    this.init();
+  }
+
+  public reset() {
+      this.credentials = [];
+      this.liveStates = {};
+      this.init();
+  }
+
+  private init() {
     if (configService.isDemoMode) {
       this.credentials = JSON.parse(JSON.stringify(SEED_CREDENTIALS));
     } else {
