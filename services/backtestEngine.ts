@@ -1,5 +1,5 @@
 
-import { BacktestConfig, BacktestResult, PerformanceMetrics, Bar, Trade, Strategy } from '../types';
+import { BacktestConfig, BacktestResult, PerformanceMetrics, Bar, Trade, Strategy, Venue } from '../types';
 import researchService from './researchService';
 import auditLogService from './auditLogService';
 import BinanceService from './binanceService';
@@ -15,10 +15,10 @@ class BacktestEngine {
     
     for (const symbol of config.symbols) {
       const klines = await binance.getKlines(symbol, 'FUTURES', '1m', 1000);
-      // Fix: Added missing type property
+      // Fix: Cast venue to Venue type
       const bars: Bar[] = klines.map(k => ({
         id: `bar-${k.openTime}`,
-        venue: 'BINANCE_USDT_M',
+        venue: 'BINANCE_USDT_M' as Venue,
         symbol,
         venueTime: k.openTime,
         interval: '1m',
@@ -48,10 +48,10 @@ class BacktestEngine {
 
     for (let i = 0; i < totalSteps; i++) {
       const row = conn.get(i);
-      // Fix: Added missing type property
+      // Fix: Cast row.venue to Venue type
       const bar: Bar = {
         id: `row-${i}`,
-        venue: row.venue,
+        venue: row.venue as Venue,
         symbol: row.symbol,
         venueTime: row.venue_time,
         open: row.open, high: row.high, low: row.low, close: row.close,

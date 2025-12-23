@@ -1,13 +1,33 @@
 
-export type Venue = 'BINANCE_SPOT' | 'BINANCE_USDT_M' | 'BINANCE_COIN_M' | 'SPOT' | 'PERP_USDT' | 'FUTURE_USDT' | 'BINANCE_PERP' | 'BINANCE_FUTURE' | 'SIM_EXCHANGE';
-export type Side = 'LONG' | 'SHORT' | 'FLAT';
-export type MarginType = 'CROSS' | 'ISOLATED';
+export type Venue = 
+  | 'BINANCE' 
+  | 'BINANCE_SPOT'
+  | 'BINANCE_USDT_M'
+  | 'BINANCE_COIN_M'
+  | 'BINANCE_PERP'
+  | 'BINANCE_FUTURE'
+  | 'SPOT'
+  | 'PERP_USDT'
+  | 'FUTURE_USDT'
+  | 'BITFINEX' 
+  | 'BITSTAMP' 
+  | 'COINBASE' 
+  | 'GEMINI' 
+  | 'KRAKEN' 
+  | 'HYPERLIQUID' 
+  | 'SIM_EXCHANGE';
+
+export type Side = 'LONG' | 'SHORT' | 'FLAT' | 'BUY' | 'SELL';
+export type MarginType = 'CROSS' | 'ISOLATED' | 'SPOT';
+
+export type RoutingMode = 'BEST' | 'DIRECT';
+export type ExecutionAlgo = 'VENUE_DEFAULT' | 'TWAP' | 'VWAP' | 'PASSIVE_REBATE' | 'SMART_SWEEP';
 
 // --- Normalized Market Data Models ---
 
 export interface NormalizedEvent {
   id: string | number;
-  venue: Venue | string;
+  venue: Venue;
   symbol: string;
   venueTime: number;
   receivedTime?: number;
@@ -19,7 +39,26 @@ export interface Trade extends NormalizedEvent {
   qty: number;
   time: number;
   isBuyerMaker: boolean;
-  orderId?: string; // Link to order
+  orderId?: string;
+}
+
+export interface Quote extends NormalizedEvent {
+  type: 'QUOTE';
+  bidPrice: number;
+  bidSize: number;
+  askPrice: number;
+  askSize: number;
+}
+
+export interface OrderBookLevel {
+  price: number;
+  size: number;
+  total: number;
+}
+
+export interface OrderBook {
+  bids: OrderBookLevel[];
+  asks: OrderBookLevel[];
 }
 
 export interface Bar extends NormalizedEvent {
@@ -38,24 +77,6 @@ export interface FundingEvent extends NormalizedEvent {
   nextFundingTime: number;
 }
 
-// --- Unified Strategy Interface ---
-
-export interface Strategy {
-  id: string;
-  config: Record<string, any>;
-  onBar: (bar: Bar) => void;
-  onTrade: (trade: Trade) => void;
-  onFunding: (event: FundingEvent) => void;
-  init: (ctx: BacktestContext) => void;
-}
-
-export interface BacktestContext {
-  initialCapital: number;
-  placeOrder: (order: Partial<Order>) => void;
-  getEquity: () => number;
-  getPosition: (symbol: string) => number;
-}
-
 export type OrderStatus = 'NEW' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCELLED' | 'REJECTED';
 export type OrderType = 'MARKET' | 'LIMIT';
 export type TimeInForce = 'GTC' | 'IOC' | 'FOK';
@@ -67,7 +88,7 @@ export interface Order {
   side: Side;
   qty: number;
   price?: number;
-  arrivalPrice?: number; // Mid-price at the time order was placed
+  arrivalPrice?: number;
   type: OrderType;
   tif?: TimeInForce;
   status: OrderStatus;
@@ -78,42 +99,11 @@ export interface Order {
   fullFillTime?: number;
   strategyId?: string;
   traderId?: string;
+  // Multi-Venue Routing Fields - Made optional to fix assignability in simulation services
+  routingMode?: RoutingMode;
+  executionAlgo?: ExecutionAlgo;
+  parentOrderId?: string;
 }
-
-// --- Backtesting & Research Types ---
-
-export interface BacktestConfig {
-  id: string;
-  strategyId: string;
-  symbols: string[];
-  startTime: number;
-  endTime: number;
-  initialCapital: number;
-  slippageBps: number;
-  latencyMs: number;
-  parameters: Record<string, any>;
-}
-
-export interface PerformanceMetrics {
-  sharpeRatio: number;
-  maxDrawdown: number;
-  totalReturnPct: number;
-  winRate: number;
-  profitFactor: number;
-  totalTrades: number;
-  annualizedReturn: number;
-  volatility: number;
-}
-
-export interface BacktestResult {
-  config: BacktestConfig;
-  metrics: PerformanceMetrics;
-  equityCurve: { timestamp: number; equity: number }[];
-  pnlLog: { timestamp: number; pnl: number; reason: string }[];
-  executionLog: Trade[];
-}
-
-// --- Strategy & Account Models ---
 
 export interface StrategyInstance { 
   id: string; 
@@ -121,7 +111,7 @@ export interface StrategyInstance {
   family: string; 
   desk: string; 
   owner: string; 
-  venues: string[]; 
+  venues: Venue[]; 
   instruments: string[]; 
   state: StrategyState; 
   rejectRate: number; 
@@ -157,6 +147,7 @@ export interface WindowState {
   type: ViewType;
   title: string;
   symbol?: string;
+  venue: Venue; // Track active venue per window
   isFloating: boolean;
   isMinimized: boolean;
   zIndex: number;
@@ -172,75 +163,28 @@ export interface ScreenConfig {
 
 export interface Kline { openTime: number; open: number; high: number; low: number; close: number; volume: number; closeTime: number; }
 
-// --- Support Types ---
-
-export interface WebSocketMessage {
-  s?: string;
-  b?: string;
-  B?: string;
-  a?: string;
-  A?: string;
-  e?: string;
-  p?: string;
-  r?: string;
-  T?: number;
-  bids?: [string, string][];
-  asks?: [string, string][];
-}
-
-export interface SpotTicker {
-  symbol: string;
-  bidPrice: number;
-  bidQty: number;
-  askPrice: number;
-  askQty: number;
-}
-
-export interface FuturesMark {
-  symbol: string;
-  markPrice: number;
-  fundingRate: number;
-  nextFundingTime: number;
-}
-
-export interface OrderBookLevel {
-  price: number;
-  size: number;
-  total: number;
-}
-
-export interface OrderBook {
-  bids: OrderBookLevel[];
-  asks: OrderBookLevel[];
-}
-
-export interface FuturesSymbolInfo {
-  symbol: string;
-  pair: string;
-  contractType: string;
-  deliveryDate: number;
-  onboardDate: number;
-  baseAsset: string;
-  quoteAsset: string;
-}
-
 export interface CombinedMarketData {
   symbol: string;
-  spot?: SpotTicker;
-  futures?: FuturesMark;
+  venue: Venue;
+  quote?: Quote;
+  markPrice?: number;
+  fundingRate?: number;
 }
 
 export interface FocusMetrics {
+  change1m: number;
+  change5m: number;
+  basisChange1m: number;
+  basisChange5m: number;
   spotChange1m: number;
   spotChange5m: number;
   perpChange1m: number;
   perpChange5m: number;
-  basisChange1m: number;
-  basisChange5m: number;
 }
 
 export interface CurvePoint {
   symbol: string;
+  venue: Venue;
   type: 'SPOT' | 'PERP' | 'FUTURE';
   marginType: 'SPOT' | 'USDT' | 'COIN';
   price: number;
@@ -255,15 +199,13 @@ export interface Position {
   id: string;
   baseAsset: string;
   symbol: string;
-  venue: string;
+  venue: Venue;
   side: 'LONG' | 'SHORT';
   quantity: number;
   avgEntryPrice: number;
   timestamp: number;
   strategyId?: string;
   traderId?: string;
-  // Added optional marginType property used in AccountManagerWidget to resolve missing property error
-  marginType?: string;
 }
 
 export interface LivePosition extends Position {
@@ -272,6 +214,7 @@ export interface LivePosition extends Position {
   notionalUsd: number;
   unrealizedPnl: number;
   pnlPercent: number;
+  marginType?: MarginType;
 }
 
 export interface PortfolioGroup {
@@ -294,6 +237,7 @@ export interface RiskMetrics {
 
 export interface CarryMetric {
   baseAsset: string;
+  venue: Venue;
   spotPrice: number;
   perpPrice: number;
   basisBps: number;
@@ -309,15 +253,6 @@ export interface RiskLimit {
   isHardBlock: boolean;
 }
 
-export interface RiskOverrideLog {
-  timestamp: number;
-  entityId: string;
-  user: string;
-  oldLimit: number;
-  newLimit: number;
-  reason: string;
-}
-
 export interface RiskNode {
   id: string;
   name: string;
@@ -331,32 +266,6 @@ export interface RiskNode {
   isBreached: boolean;
   children?: RiskNode[];
   isBlocked?: boolean;
-}
-
-export interface StrategyLog {
-  timestamp: number;
-  strategyId: string;
-  user: string;
-  action: string;
-  oldState?: StrategyState;
-  newState?: StrategyState;
-  reason: string;
-}
-
-export interface FeedHealth {
-  venue: Venue;
-  status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR';
-  latencyMs: number;
-  messageCount: number;
-  errorCount: number;
-}
-
-export interface Quote {
-    symbol: string;
-    bidPrice: number;
-    askPrice: number;
-    bidSize: number;
-    askSize: number;
 }
 
 export interface Credential {
@@ -378,4 +287,95 @@ export interface AccountState {
   availableBalance: number;
   positions: LivePosition[];
   lastUpdate: number;
+}
+
+export interface WebSocketMessage {
+  s?: string; b?: string; B?: string; a?: string; A?: string; e?: string; p?: string; r?: string; T?: number;
+}
+
+// --- New Types added to fix missing exports ---
+
+export interface SpotTicker {
+  symbol: string;
+  bidPrice: number;
+  bidQty: number;
+  askPrice: number;
+  askQty: number;
+}
+
+export interface FuturesMark {
+  symbol: string;
+  markPrice: number;
+  fundingRate: number;
+  nextFundingTime: number;
+}
+
+export interface FuturesSymbolInfo {
+  symbol: string;
+  pair: string;
+  contractType: string;
+  deliveryDate: number;
+  onboardDate: number;
+  baseAsset: string;
+  quoteAsset: string;
+}
+
+export interface RiskOverrideLog {
+  timestamp: number;
+  entityId: string;
+  user: string;
+  oldLimit: number;
+  newLimit: number;
+  reason: string;
+}
+
+export interface StrategyLog {
+  timestamp: number;
+  strategyId: string;
+  user: string;
+  action: string;
+  oldState: StrategyState;
+  newState: StrategyState;
+  reason: string;
+}
+
+export interface BacktestConfig {
+  id: string;
+  strategyId: string;
+  symbols: string[];
+  startTime: number;
+  endTime: number;
+  initialCapital: number;
+  slippageBps: number;
+  latencyMs: number;
+  parameters: Record<string, any>;
+}
+
+export interface PerformanceMetrics {
+  sharpeRatio: number;
+  maxDrawdown: number;
+  totalReturnPct: number;
+  winRate: number;
+  profitFactor: number;
+  totalTrades: number;
+  annualizedReturn: number;
+  volatility: number;
+}
+
+export interface BacktestResult {
+  config: BacktestConfig;
+  metrics: PerformanceMetrics;
+  equityCurve: { timestamp: number; equity: number }[];
+  pnlLog: any[];
+  executionLog: Trade[];
+}
+
+export type Strategy = StrategyInstance;
+
+export interface FeedHealth {
+  venue: Venue;
+  status: 'CONNECTED' | 'DISCONNECTED' | 'ERROR';
+  latencyMs: number;
+  messageCount: number;
+  errorCount: number;
 }

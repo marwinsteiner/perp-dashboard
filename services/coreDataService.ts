@@ -6,14 +6,21 @@ import { v4 as uuidv4 } from 'uuid';
 class CoreDataService {
   // Fix: Initialize all Venue keys to match the Record<Venue, FeedHealth> type definition
   private health: Record<Venue, FeedHealth> = {
+    'BINANCE': { venue: 'BINANCE', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
     'BINANCE_SPOT': { venue: 'BINANCE_SPOT', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
     'BINANCE_USDT_M': { venue: 'BINANCE_USDT_M', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
     'BINANCE_COIN_M': { venue: 'BINANCE_COIN_M', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
+    'BINANCE_PERP': { venue: 'BINANCE_PERP', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
+    'BINANCE_FUTURE': { venue: 'BINANCE_FUTURE', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
     'SPOT': { venue: 'SPOT', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
     'PERP_USDT': { venue: 'PERP_USDT', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
     'FUTURE_USDT': { venue: 'FUTURE_USDT', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
-    'BINANCE_PERP': { venue: 'BINANCE_PERP', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
-    'BINANCE_FUTURE': { venue: 'BINANCE_FUTURE', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
+    'BITFINEX': { venue: 'BITFINEX', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
+    'BITSTAMP': { venue: 'BITSTAMP', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
+    'COINBASE': { venue: 'COINBASE', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
+    'GEMINI': { venue: 'GEMINI', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
+    'KRAKEN': { venue: 'KRAKEN', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
+    'HYPERLIQUID': { venue: 'HYPERLIQUID', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 },
     'SIM_EXCHANGE': { venue: 'SIM_EXCHANGE', status: 'DISCONNECTED', latencyMs: 0, messageCount: 0, errorCount: 0 }
   };
 

@@ -1,6 +1,7 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import BinanceService from '../services/binanceService';
-import { FuturesSymbolInfo, CurvePoint } from '../types';
+import { FuturesSymbolInfo, CurvePoint, Venue } from '../types';
 
 export const useFuturesCurve = (
   baseSymbol: string, // e.g. BTCUSDT (we extract 'BTC')
@@ -121,8 +122,10 @@ export const useFuturesCurve = (
     const points: CurvePoint[] = [];
 
     // Add Spot Point (Reference at 0,0)
+    // Fix: Added missing venue property for CurvePoint
     points.push({
         symbol: 'SPOT',
+        venue: 'BINANCE_SPOT',
         type: 'SPOT',
         marginType: 'SPOT',
         price: spot,
@@ -158,8 +161,10 @@ export const useFuturesCurve = (
         
         const marginType = info.quoteAsset === 'USDT' ? 'USDT' : 'COIN';
 
+        // Fix: Added missing venue property for CurvePoint
         points.push({
             symbol: info.symbol,
+            venue: (info.quoteAsset === 'USDT' ? 'BINANCE_USDT_M' : 'BINANCE_COIN_M') as Venue,
             type,
             marginType,
             price,
