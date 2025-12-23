@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import paperExecutionService from '../services/paperExecutionService';
 import { Trade } from '../types';
@@ -38,7 +37,8 @@ const BlotterWidget: React.FC = () => {
                      {trades.map(t => (
                          <tr key={t.id} className="hover:bg-gray-900/30">
                              <td className="px-2 py-1 text-gray-500 whitespace-nowrap">{new Date(t.time).toLocaleTimeString()}</td>
-                             <td className="px-2 py-1 text-gray-600 truncate max-w-[50px]">{t.id.substring(0,6)}</td>
+                             {/* Fix: Ensure t.id is cast to string before calling substring as it can be string | number */}
+                             <td className="px-2 py-1 text-gray-600 truncate max-w-[50px]">{String(t.id).substring(0,6)}</td>
                              <td className="px-2 py-1 text-white font-bold">{t.symbol}</td>
                              <td className="px-2 py-1 text-gray-500">{t.venue}</td>
                              <td className={`px-2 py-1 font-bold ${!t.isBuyerMaker ? 'text-green-500' : 'text-red-500'}`}>

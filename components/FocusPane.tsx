@@ -1,54 +1,41 @@
-import React, { useRef } from 'react';
-import BinanceService from '../services/binanceService';
+
+import React, { useState } from 'react';
 import { useFocusSymbol } from '../hooks/useFocusSymbol';
 import DepthLadder from './DepthLadder';
 import RecentTrades from './RecentTrades';
 import MetricsPanel from './MetricsPanel';
+import VenueSelector from './VenueSelector';
+import { Venue } from '../types';
 
 interface FocusPaneProps {
   symbol: string;
-  serviceRef: React.MutableRefObject<BinanceService | null>;
+  venue: Venue;
   onClose: () => void;
 }
 
-const FocusPane: React.FC<FocusPaneProps> = ({ symbol, serviceRef, onClose }) => {
-  const { spotDepth, futuresDepth, recentTrades, metrics } = useFocusSymbol(symbol, serviceRef);
+const FocusPane: React.FC<FocusPaneProps> = ({ symbol, venue: initialVenue, onClose }) => {
+  const [venue, setVenue] = useState<Venue>(initialVenue);
+  const { book, recentTrades, metrics } = useFocusSymbol(symbol, venue);
 
   return (
-    <div className="h-full flex flex-col border-l border-cyan-900/50 bg-black">
-      <div className="bg-cyan-900/20 p-2 border-b border-cyan-900/30 flex justify-between items-center">
-        <h2 className="text-cyan-400 font-bold text-sm tracking-wider">FOCUS: {symbol.replace('USDT','')}</h2>
-        <div className="flex items-center gap-3">
-            <span className="text-[10px] text-cyan-600 animate-pulse">LIVE FEED</span>
-            <button 
-                onClick={onClose}
-                className="text-gray-500 hover:text-red-500 font-mono font-bold text-xs"
-                title="Close Focus Pane (x)"
-            >
-                [x]
-            </button>
+    <div className="h-full flex flex-col bg-black">
+      <div className="bg-neutral-900 p-2 border-b border-gray-800 flex justify-between items-center shrink-0">
+        <div className="flex items-center gap-4">
+            <h2 className="text-cyan-400 font-bold text-xs tracking-widest uppercase">FOCUS: {symbol.replace('USDT','')}</h2>
+            <VenueSelector activeVenue={venue} onSelect={setVenue} />
         </div>
+        <button onClick={onClose} className="text-gray-600 hover:text-red-500 font-mono font-bold text-xs">[x]</button>
       </div>
 
-      {/* Metrics */}
-      <div className="border-b border-gray-800">
+      <div className="border-b border-gray-800 bg-black/40">
         <MetricsPanel metrics={metrics} />
       </div>
 
-      {/* Main Content Area */}
       <div className="flex-1 flex min-h-0">
-        {/* Spot Depth */}
-        <div className="w-1/3 min-w-0">
-          <DepthLadder title="SPOT" book={spotDepth} />
+        <div className="w-1/2 min-w-0 border-r border-gray-800">
+          <DepthLadder title={`${venue} L2 BOOK`} book={book} />
         </div>
-        
-        {/* Futures Depth */}
-        <div className="w-1/3 min-w-0">
-          <DepthLadder title="PERP" book={futuresDepth} />
-        </div>
-
-        {/* Trades */}
-        <div className="w-1/3 min-w-0 border-l border-gray-800">
+        <div className="w-1/2 min-w-0">
            <RecentTrades trades={recentTrades} />
         </div>
       </div>

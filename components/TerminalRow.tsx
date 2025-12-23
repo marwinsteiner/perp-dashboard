@@ -15,12 +15,13 @@ const formatPrice = (price: number | undefined) => {
 };
 
 const TerminalRow: React.FC<TerminalRowProps> = memo(({ data, isSelected, innerRef }) => {
-  const { symbol, spot, futures } = data;
+  // Fix: Destructure properties that actually exist on CombinedMarketData
+  const { symbol, quote, markPrice, fundingRate } = data;
 
-  const bid = spot?.bidPrice;
-  const ask = spot?.askPrice;
-  const mark = futures?.markPrice;
-  const funding = futures?.fundingRate;
+  const bid = quote?.bidPrice;
+  const ask = quote?.askPrice;
+  const mark = markPrice;
+  const funding = fundingRate;
 
   const spreadBps = (bid && ask && bid > 0) ? ((ask - bid) / bid) * 10000 : 0;
   const basis = (mark && bid && ask) ? mark - ((bid + ask) / 2) : 0;
